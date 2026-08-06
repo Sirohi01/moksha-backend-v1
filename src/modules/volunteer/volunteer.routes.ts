@@ -3,10 +3,12 @@ import { authorize, requireAuth, requireUserType } from "../../middlewares/auth.
 import { validate } from "../../middlewares/validate.middleware";
 import * as volunteerController from "./volunteer.controller";
 import {
+  assignmentDetailParamsSchema,
   listVolunteersQuerySchema,
   registerVolunteerSchema,
   respondToAssignmentSchema,
   updateAvailabilitySchema,
+  updateMyVolunteerProfileSchema,
   updateVolunteerStatusSchema,
 } from "./volunteer.validation";
 
@@ -18,6 +20,13 @@ router.post("/register", validate(registerVolunteerSchema), volunteerController.
 // Self-service (the volunteer themselves)
 router.get("/me", requireAuth, requireUserType("VOLUNTEER"), volunteerController.getMyProfile);
 router.patch(
+  "/me",
+  requireAuth,
+  requireUserType("VOLUNTEER"),
+  validate(updateMyVolunteerProfileSchema),
+  volunteerController.updateMyProfile
+);
+router.patch(
   "/me/availability",
   requireAuth,
   requireUserType("VOLUNTEER"),
@@ -25,6 +34,13 @@ router.patch(
   volunteerController.updateMyAvailability
 );
 router.get("/me/assignments", requireAuth, requireUserType("VOLUNTEER"), volunteerController.listMyAssignments);
+router.get(
+  "/me/assignments/:assignmentId",
+  requireAuth,
+  requireUserType("VOLUNTEER"),
+  validate(assignmentDetailParamsSchema),
+  volunteerController.getMyAssignmentDetail
+);
 router.patch(
   "/me/assignments/:assignmentId/respond",
   requireAuth,

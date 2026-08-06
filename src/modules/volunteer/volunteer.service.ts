@@ -3,6 +3,8 @@ import { User, IUser } from "../../models/user.model";
 import { Volunteer, IVolunteer } from "../../models/volunteer.model";
 import { VolunteerAssignment } from "../../models/volunteerAssignment.model";
 import { Case } from "../../models/case.model";
+import { AssistanceRequest } from "../../models/assistanceRequest.model";
+import { CaseTimeline } from "../../models/caseTimeline.model";
 import { Role } from "../../models/role.model";
 import { ApiError } from "../../utils/ApiError";
 import { env } from "../../config/env";
@@ -167,10 +169,6 @@ async function findMyVolunteerProfile(userId: string): Promise<IVolunteer> {
   if (!volunteer) throw ApiError.notFound("Volunteer profile not found");
   return volunteer;
 }
-
-/** The volunteer viewing their own profile — always decrypts `address`, never gated behind
- * EXPOSE_DECRYPTED_DATA, since this is the account holder reading their own data (same reasoning
- * documented on registerVolunteer's response and request.service.ts's createRequest). */
 export async function getMyProfile(userId: string) {
   const volunteer = await findMyVolunteerProfile(userId);
   const user = await User.findById(userId).select("name phone email avatarUrl");
@@ -192,9 +190,29 @@ export async function updateMyAvailability(userId: string, availability: Volunte
   return volunteer;
 }
 
-/** Enriches each assignment with a small Case summary (human-readable caseId, status, city,
- * priority) — the raw `caseId` field on VolunteerAssignment is just a Mongo ObjectId, useless for
- * a volunteer trying to tell one assignment apart from another at a glance. */
+interface UpdateMyVolunteerProfileInput {
+  city?: string;
+  skills?: string[];
+  address?: string;
+  state?: string;
+  pincode?: string;
+  schedulePreference?: VolunteerSchedulePreference;
+  preferredRole?: VolunteerPreferredRole;
+}
+export async function updateMyVolunteerProfile(userId: string, input: UpdateMyVolunteerProfileInput) {
+  const volunteer = await findMyVolunteerProfile(userId);
+  if (input.city !== undefined) volunteer.city = input.city;
+  if (input.skills !== undefined) volunteer.skills = input.skills;
+  if (input.address !== undefined) volunteer.address = input.address;
+  if (input.state !== undefined) volunteer.state = input.state;
+  if (input.pincode !== undefined) volunteer.pincode = input.pincode;
+  if (input.schedulePreference !== undefined) volunteer.schedulePreference = input.schedulePreference;
+  if (input.preferredRole !== undefined) volunteer.preferredRole = input.preferredRole;
+  await volunteer.save();
+
+  const obj = volunteer.toObject();
+  return { ...obj, address: obj.address ? decryptField(obj.address) : obj.address };
+}
 export async function listMyAssignments(userId: string) {
   const volunteer = await findMyVolunteerProfile(userId);
   const assignments = await VolunteerAssignment.find({ volunteerId: volunteer._id }).sort({ createdAt: -1 });
@@ -213,6 +231,44 @@ export async function listMyAssignments(userId: string) {
         : null,
     };
   });
+}
+export async function getMyAssignmentDetail(userId: string, assignmentId: string) {
+  const volunteer = await findMyVolunteerProfile(userId);
+
+  const assignment = await VolunteerAssignment.findOne({ _id: assignmentId, volunteerId: volunteer._id });
+  if (!assignment) throw ApiError.notFound("Assignment not found");
+
+  const kase = await Case.findById(assignment.caseId);
+  if (!kase) throw ApiError.notFound("Case not found");
+
+  const [request, timeline, caseManager] = await Promise.all([
+    AssistanceRequest.findById(kase.requestId),
+    CaseTimeline.find({ caseId: kase._id, visibility: "FAMILY" }).sort({ at: 1 }),
+    kase.caseManagerId ? User.findById(kase.caseManagerId).select("name phone") : Promise.resolve(null),
+  ]);
+
+  return {
+    assignment: assignment.toObject(),
+    case: {
+      caseId: kase.caseId,
+      status: kase.status,
+      priority: kase.priority,
+      city: kase.city,
+      scheduledAt: kase.scheduledAt,
+    },
+    pickup: request
+      ? {
+        address: decryptField(request.location.address),
+        area: request.location.area,
+        city: request.location.city,
+        state: request.location.state,
+        pincode: request.location.pincode,
+      }
+      : null,
+    contact: request ? { name: request.requester.name, phone: request.requester.phone, altPhone: request.requester.altPhone } : null,
+    caseManager: caseManager ? { name: caseManager.name, phone: caseManager.phone } : null,
+    timeline: timeline.map((t) => ({ event: t.event, toStatus: t.toStatus, note: t.note, at: t.at })),
+  };
 }
 
 /** A volunteer accepting/declining their own assignment — deliberately restricted to the

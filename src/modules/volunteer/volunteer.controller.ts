@@ -40,6 +40,11 @@ export const getMyProfile = asyncHandler(async (req: Request, res: Response) => 
   sendSuccess(res, 200, "Profile fetched", volunteer);
 });
 
+export const updateMyProfile = asyncHandler(async (req: Request, res: Response) => {
+  const volunteer = await volunteerService.updateMyVolunteerProfile(req.auth!.userId, req.body);
+  sendSuccess(res, 200, "Profile updated", volunteer);
+});
+
 export const updateMyAvailability = asyncHandler(async (req: Request, res: Response) => {
   const volunteer = await volunteerService.updateMyAvailability(req.auth!.userId, req.body.availability);
   sendSuccess(res, 200, "Availability updated", volunteer);
@@ -48,6 +53,11 @@ export const updateMyAvailability = asyncHandler(async (req: Request, res: Respo
 export const listMyAssignments = asyncHandler(async (req: Request, res: Response) => {
   const assignments = await volunteerService.listMyAssignments(req.auth!.userId);
   sendSuccess(res, 200, "Assignments fetched", assignments);
+});
+
+export const getMyAssignmentDetail = asyncHandler(async (req: Request, res: Response) => {
+  const detail = await volunteerService.getMyAssignmentDetail(req.auth!.userId, req.params.assignmentId);
+  sendSuccess(res, 200, "Assignment detail fetched", detail);
 });
 
 export const respondToAssignment = asyncHandler(async (req: Request, res: Response) => {

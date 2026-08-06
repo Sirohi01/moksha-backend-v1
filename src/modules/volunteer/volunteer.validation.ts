@@ -53,6 +53,22 @@ export const updateAvailabilitySchema = z.object({
   body: z.object({ availability: z.enum(VOLUNTEER_AVAILABILITY) }),
 });
 
+export const updateMyVolunteerProfileSchema = z.object({
+  body: z.object({
+    city: z.string().trim().min(2, "City is required").optional(),
+    skills: z.array(z.string().trim()).optional(),
+    address: z.string().trim().min(5).optional(),
+    state: z.string().trim().min(2).optional(),
+    pincode: z.string().trim().regex(/^\d{6}$/, "Enter a valid 6-digit pincode").optional(),
+    schedulePreference: z.enum(VOLUNTEER_SCHEDULE_PREFERENCES).optional(),
+    preferredRole: z.enum(VOLUNTEER_PREFERRED_ROLES).optional(),
+  }),
+});
+
+export const assignmentDetailParamsSchema = z.object({
+  params: z.object({ assignmentId: z.string().trim().min(1) }),
+});
+
 export const respondToAssignmentSchema = z.object({
   params: z.object({ assignmentId: z.string().trim().min(1) }),
   body: z.object({
