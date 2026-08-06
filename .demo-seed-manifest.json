@@ -1,0 +1,62 @@
+{
+  "createdAt": "2026-08-05T05:43:14.827Z",
+  "requestIds": [
+    "6a72cd730eed9a860800495b",
+    "6a72cd730eed9a860800496b",
+    "6a72cd730eed9a8608004981",
+    "6a72cd730eed9a860800499e",
+    "6a72cd730eed9a86080049d3",
+    "6a72cd730eed9a8608004a17"
+  ],
+  "caseIds": [
+    "6a72cd730eed9a8608004961",
+    "6a72cd730eed9a8608004971",
+    "6a72cd730eed9a8608004987",
+    "6a72cd730eed9a86080049a4",
+    "6a72cd730eed9a86080049d9",
+    "6a72cd730eed9a8608004a1d"
+  ],
+  "assignmentIds": [
+    "6a72cd730eed9a86080049bd",
+    "6a72cd730eed9a86080049f2",
+    "6a72cd730eed9a8608004a36"
+  ],
+  "expenseIds": [
+    "6a72cd730eed9a8608004a6b",
+    "6a72cd730eed9a8608004a71"
+  ],
+  "volunteerIds": [
+    "6a72cd730eed9a8608004942",
+    "6a72cd730eed9a860800494b",
+    "6a72cd730eed9a8608004954"
+  ],
+  "volunteerUserIds": [
+    "6a72cd730eed9a8608004940",
+    "6a72cd730eed9a8608004949",
+    "6a72cd730eed9a8608004952"
+  ],
+  "donationIds": [
+    "6a72cd740eed9a8608004a78",
+    "6a72cd740eed9a8608004a85",
+    "6a72cd740eed9a8608004a92",
+    "6a72cd740eed9a8608004a9f"
+  ],
+  "donorIds": [
+    "6a72cd730eed9a8608004a76",
+    "6a72cd740eed9a8608004a83",
+    "6a72cd740eed9a8608004a90",
+    "6a72cd740eed9a8608004a9d"
+  ],
+  "receiptIds": [
+    "6a72cd740eed9a8608004a7d",
+    "6a72cd740eed9a8608004a8a",
+    "6a72cd740eed9a8608004a97",
+    "6a72cd740eed9a8608004aa4"
+  ],
+  "enquiryIds": [
+    "6a72cd740eed9a8608004aa9",
+    "6a72cd740eed9a8608004aab"
+  ],
+  "expenseCategoryId": "6a72cd730eed9a8608004a67",
+  "expenseCategoryCreated": true
+}
