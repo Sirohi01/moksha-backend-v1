@@ -12,7 +12,7 @@ import { ApiError } from "../../utils/ApiError";
 import { generateCaseId } from "../../lib/counter.service";
 import { writeAuditLog } from "../../lib/audit.service";
 import { uploadBuffer } from "../../lib/cloudinary";
-import { maybeDecrypt } from "../../lib/crypto";
+import { decryptField, maybeDecrypt } from "../../lib/crypto";
 import { notify } from "../../lib/notify.service";
 import { CASE_STATUS_LABELS } from "../../utils/statusLabels";
 import { compactFilter } from "../../utils/compactFilter";
@@ -157,14 +157,11 @@ export async function transitionCaseStatus(
     entityId: caseId,
     after: { status: toStatus },
   });
-
-  // Best-effort — a notification failing must never undo (or even slow down) a status change
-  // that has already committed. Only fires when the family gave an email at intake.
   const request = await AssistanceRequest.findById(kase!.requestId);
   if (request?.requester.email) {
     await notify(
       "family.case_status_update",
-      { email: request.requester.email },
+      { email: decryptField(request.requester.email) },
       { requesterName: request.requester.name, caseId: kase!.caseId, statusLabel: CASE_STATUS_LABELS[toStatus] }
     );
   }
@@ -715,13 +712,12 @@ export async function renderCaseSummaryHtml(caseId: string): Promise<string> {
   ])}
 
   <h2>Volunteers</h2>
-  ${
-    detail.assignments.length
+  ${detail.assignments.length
       ? detail.assignments
-          .map((a: any) => `<div class="row"><span class="label">${a.role}</span><span class="value">${a.volunteerName ?? "—"} (${a.status})</span></div>`)
-          .join("")
+        .map((a: any) => `<div class="row"><span class="label">${a.role}</span><span class="value">${a.volunteerName ?? "—"} (${a.status})</span></div>`)
+        .join("")
       : `<p style="font-size:13px;color:#7A685B;">No volunteers assigned.</p>`
-  }
+    }
 </body>
 </html>`;
 }

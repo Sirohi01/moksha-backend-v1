@@ -169,7 +169,16 @@ export async function notify(templateKey: string, recipient: NotifyRecipient, va
       return; // notificationQueue.service.ts's sweep picks this up once nextRetryAt arrives
     }
 
-    await attemptDelivery(log);
+    // Deliberately NOT awaited — attemptDelivery() does a real SMTP round-trip (often 1-3s, more
+    // under any network strain), and notify()'s callers are always request handlers doing this
+    // inline (a status change, an expense decision, a staff invite). Awaiting it here would mean
+    // every one of those API calls stays blocked until the email either sends or fails, directly
+    // contradicting this function's own "never slows down the caller" contract. attemptDelivery()
+    // already never throws — it catches everything and persists the outcome to the log entry —
+    // so this is a pure background fire-and-forget, not a dropped error path.
+    attemptDelivery(log).catch((err) => {
+      logger.error(`notify(): unexpected failure delivering "${templateKey}"`, { err });
+    });
   } catch (err) {
     logger.error(`notify(): unexpected failure for template "${templateKey}"`, { err });
   }
