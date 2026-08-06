@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { User, IUser } from "../../models/user.model";
 import { Volunteer, IVolunteer } from "../../models/volunteer.model";
 import { VolunteerAssignment } from "../../models/volunteerAssignment.model";
+import { Case } from "../../models/case.model";
 import { Role } from "../../models/role.model";
 import { ApiError } from "../../utils/ApiError";
 import { env } from "../../config/env";
@@ -167,6 +168,23 @@ async function findMyVolunteerProfile(userId: string): Promise<IVolunteer> {
   return volunteer;
 }
 
+/** The volunteer viewing their own profile — always decrypts `address`, never gated behind
+ * EXPOSE_DECRYPTED_DATA, since this is the account holder reading their own data (same reasoning
+ * documented on registerVolunteer's response and request.service.ts's createRequest). */
+export async function getMyProfile(userId: string) {
+  const volunteer = await findMyVolunteerProfile(userId);
+  const user = await User.findById(userId).select("name phone email avatarUrl");
+  const obj = volunteer.toObject();
+  return {
+    ...obj,
+    address: obj.address ? decryptField(obj.address) : obj.address,
+    name: user?.name,
+    phone: user?.phone,
+    email: user?.email,
+    avatarUrl: user?.avatarUrl,
+  };
+}
+
 export async function updateMyAvailability(userId: string, availability: VolunteerAvailability) {
   const volunteer = await findMyVolunteerProfile(userId);
   volunteer.availability = availability;
@@ -174,9 +192,27 @@ export async function updateMyAvailability(userId: string, availability: Volunte
   return volunteer;
 }
 
+/** Enriches each assignment with a small Case summary (human-readable caseId, status, city,
+ * priority) — the raw `caseId` field on VolunteerAssignment is just a Mongo ObjectId, useless for
+ * a volunteer trying to tell one assignment apart from another at a glance. */
 export async function listMyAssignments(userId: string) {
   const volunteer = await findMyVolunteerProfile(userId);
-  return VolunteerAssignment.find({ volunteerId: volunteer._id }).sort({ createdAt: -1 });
+  const assignments = await VolunteerAssignment.find({ volunteerId: volunteer._id }).sort({ createdAt: -1 });
+
+  const cases = await Case.find({ _id: { $in: assignments.map((a) => a.caseId) } }).select(
+    "caseId status city priority scheduledAt"
+  );
+  const caseById = new Map(cases.map((c) => [c._id.toString(), c]));
+
+  return assignments.map((a) => {
+    const kase = caseById.get(a.caseId.toString());
+    return {
+      ...a.toObject(),
+      case: kase
+        ? { caseId: kase.caseId, status: kase.status, city: kase.city, priority: kase.priority, scheduledAt: kase.scheduledAt }
+        : null,
+    };
+  });
 }
 
 /** A volunteer accepting/declining their own assignment — deliberately restricted to the

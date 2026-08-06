@@ -35,6 +35,11 @@ export const updateVolunteerStatusAdmin = asyncHandler(async (req: Request, res:
   sendSuccess(res, 200, "Volunteer status updated", volunteer);
 });
 
+export const getMyProfile = asyncHandler(async (req: Request, res: Response) => {
+  const volunteer = await volunteerService.getMyProfile(req.auth!.userId);
+  sendSuccess(res, 200, "Profile fetched", volunteer);
+});
+
 export const updateMyAvailability = asyncHandler(async (req: Request, res: Response) => {
   const volunteer = await volunteerService.updateMyAvailability(req.auth!.userId, req.body.availability);
   sendSuccess(res, 200, "Availability updated", volunteer);

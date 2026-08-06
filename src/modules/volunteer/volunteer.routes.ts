@@ -16,6 +16,7 @@ const router = Router();
 router.post("/register", validate(registerVolunteerSchema), volunteerController.registerVolunteer);
 
 // Self-service (the volunteer themselves)
+router.get("/me", requireAuth, requireUserType("VOLUNTEER"), volunteerController.getMyProfile);
 router.patch(
   "/me/availability",
   requireAuth,
