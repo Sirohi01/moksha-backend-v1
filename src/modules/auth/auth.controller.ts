@@ -123,3 +123,13 @@ export const confirmTwoFactorSetup = asyncHandler(async (req: Request, res: Resp
   const backupCodes = await authService.confirmTwoFactorSetup(req.auth.userId, req.body.code);
   sendSuccess(res, 200, "Two-factor authentication enabled — save these backup codes", { backupCodes });
 });
+
+export const forgotPassword = asyncHandler(async (req: Request, res: Response) => {
+  await authService.requestPasswordReset(req.body.email);
+  sendSuccess(res, 200, "If an account exists for that email, a reset link has been sent.");
+});
+
+export const resetPassword = asyncHandler(async (req: Request, res: Response) => {
+  await authService.resetPassword(req.body.token, req.body.newPassword);
+  sendSuccess(res, 200, "Password reset — please sign in with your new password.");
+});

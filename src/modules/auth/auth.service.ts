@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { User, IUser } from "../../models/user.model";
 import { Role } from "../../models/role.model";
 import { ApiError } from "../../utils/ApiError";
@@ -241,5 +242,58 @@ export async function changeMyPassword(userId: string, currentPassword: string, 
   // the account's own consent — if this wasn't the account holder, they need to know.
   if (user.email) {
     await notify("auth.password_changed", { userId, email: user.email }, { name: user.name });
+  }
+}
+
+const RESET_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+function hashResetToken(token: string): string {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+/** Step 1 of "forgot password" — the actual authentication step for this flow: possession of the
+ * email inbox stands in for the password the user has forgotten. Deliberately resolves the same
+ * way (silently) whether or not the email matches an account, so the response itself can't be used
+ * to enumerate valid admin emails. Only the SHA-256 hash of the token is persisted — see
+ * user.model.ts's passwordResetTokenHash — the raw token exists only in the emailed link. */
+export async function requestPasswordReset(email: string): Promise<void> {
+  const user = await User.findOne({ email });
+  if (!user) return;
+
+  const token = crypto.randomBytes(32).toString("hex");
+  user.passwordResetTokenHash = hashResetToken(token);
+  user.passwordResetExpiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+  await user.save();
+
+  if (user.email) {
+    const resetUrl = `${env.ADMIN_CLIENT_URL}/reset-password?token=${token}`;
+    await notify("auth.password_reset_requested", { userId: user._id.toString(), email: user.email }, { name: user.name, resetUrl });
+  }
+}
+
+/** Step 2 — the token itself already proved identity (it only ever reached the account's inbox),
+ * so this doesn't ask for the old password. Revokes every session and re-uses the same
+ * "auth.password_changed" alert as a voluntary change, since from the account holder's point of
+ * view the security-relevant fact (password changed, other sessions killed) is identical. */
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  const tokenHash = hashResetToken(token);
+  const user = await User.findOne({
+    passwordResetTokenHash: tokenHash,
+    passwordResetExpiresAt: { $gt: new Date() },
+  }).select("+passwordResetTokenHash +passwordResetExpiresAt");
+  if (!user) throw ApiError.badRequest("This reset link is invalid or has expired");
+
+  user.passwordHash = await hashPassword(newPassword);
+  user.passwordChangedAt = new Date();
+  user.passwordResetTokenHash = undefined;
+  user.passwordResetExpiresAt = undefined;
+  user.failedLoginCount = 0;
+  user.lockedUntil = undefined;
+  await user.save();
+
+  await revokeAllSessions(user._id.toString(), "password reset");
+
+  if (user.email) {
+    await notify("auth.password_changed", { userId: user._id.toString(), email: user.email }, { name: user.name });
   }
 }

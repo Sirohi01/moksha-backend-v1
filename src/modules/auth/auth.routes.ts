@@ -5,9 +5,11 @@ import * as authController from "./auth.controller";
 import {
   changePasswordSchema,
   confirmTwoFactorSchema,
+  forgotPasswordSchema,
   loginSchema,
   refreshTokenSchema,
   registerSchema,
+  resetPasswordSchema,
   sendOtpSchema,
   verifyOtpSchema,
 } from "./auth.validation";
@@ -19,6 +21,8 @@ router.post("/register", validate(registerSchema), authController.register);
 router.post("/login", validate(loginSchema), authController.login);
 router.post("/refresh-token", validate(refreshTokenSchema), authController.refreshToken);
 router.post("/logout", validate(refreshTokenSchema), authController.logout);
+router.post("/forgot-password", validate(forgotPasswordSchema), authController.forgotPassword);
+router.post("/reset-password", validate(resetPasswordSchema), authController.resetPassword);
 
 router.get("/me", requireAuth, authController.getMe);
 router.patch("/change-password", requireAuth, validate(changePasswordSchema), authController.changePassword);

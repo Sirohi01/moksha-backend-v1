@@ -39,6 +39,8 @@ export interface IUser extends Document {
   lockedUntil?: Date;
   lastLoginAt?: Date;
   passwordChangedAt?: Date;
+  passwordResetTokenHash?: string;
+  passwordResetExpiresAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -79,6 +81,10 @@ const userSchema = new Schema<IUser>(
     lockedUntil: { type: Date },
     lastLoginAt: { type: Date },
     passwordChangedAt: { type: Date },
+    // Only the SHA-256 hash is ever stored — the raw token lives solely in the emailed link, same
+    // reasoning as otpHash never storing the OTP itself.
+    passwordResetTokenHash: { type: String, select: false },
+    passwordResetExpiresAt: { type: Date, select: false },
   },
   { timestamps: true }
 );

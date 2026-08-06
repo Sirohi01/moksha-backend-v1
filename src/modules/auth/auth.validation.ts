@@ -54,3 +54,16 @@ export const confirmTwoFactorSchema = z.object({
     code: z.string().trim().min(6, "Enter the 6-digit code from your authenticator app"),
   }),
 });
+
+export const forgotPasswordSchema = z.object({
+  body: z.object({
+    email: z.string().trim().email(),
+  }),
+});
+
+export const resetPasswordSchema = z.object({
+  body: z.object({
+    token: z.string().trim().min(32, "Invalid or missing reset token"),
+    newPassword: z.string().min(8, "New password must be at least 8 characters"),
+  }),
+});

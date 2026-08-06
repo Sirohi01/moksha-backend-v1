@@ -41,6 +41,15 @@ function pLast(text: string): string {
 function muted(text: string): string {
   return `<p style="${MUTED}">${text}</p>`;
 }
+function button(url: string, label: string): string {
+  return (
+    `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 18px 0;">` +
+    `<tr><td bgcolor="#8b6a3e" style="background-color:#8b6a3e;">` +
+    `<a href="${url}" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:bold;` +
+    `color:#ffffff;text-decoration:none;font-family:${FONT};">${label}</a>` +
+    `</td></tr></table>`
+  );
+}
 
 const TEMPLATES: TemplateSeed[] = [
   {
@@ -52,7 +61,7 @@ const TEMPLATES: TemplateSeed[] = [
       p("Namaste {{name}},") +
       p(
         "We're deeply sorry for your loss. Your request for assistance has been received, and our team is " +
-          "already reviewing it. Please keep this reference number — you can use it to track progress any time:"
+        "already reviewing it. Please keep this reference number — you can use it to track progress any time:"
       ) +
       callout("{{requestNo}}") +
       pLast("Someone from our team will reach out to you shortly."),
@@ -93,7 +102,7 @@ const TEMPLATES: TemplateSeed[] = [
       p("Namaste {{name}},") +
       pLast(
         "Thank you for registering as a Moksha Sewa volunteer in {{city}}. Our team will verify your details " +
-          "and reach out when a case near you needs support."
+        "and reach out when a case near you needs support."
       ),
   },
   {
@@ -184,8 +193,19 @@ const TEMPLATES: TemplateSeed[] = [
       p("Namaste {{name}},") +
       pLast(
         "Your account password was just changed, and every other session has been signed out. " +
-          "If this wasn't you, contact an administrator immediately."
+        "If this wasn't you, contact an administrator immediately."
       ),
+  },
+  {
+    key: "auth.password_reset_requested",
+    channel: "EMAIL",
+    category: "TRANSACTIONAL",
+    subject: "Reset your Moksha Sewa password",
+    body:
+      p("Namaste {{name}},") +
+      p("We received a request to reset your Moksha Sewa admin password. Click below to choose a new one:") +
+      button("{{resetUrl}}", "Reset Password") +
+      pLast("This link expires in 30 minutes. If you didn't request this, you can safely ignore this email — your password will not be changed."),
   },
   {
     key: "donation.recurring_payment_failed",
