@@ -3,6 +3,7 @@ import { User, IUser } from "../../models/user.model";
 import { Volunteer, IVolunteer } from "../../models/volunteer.model";
 import { VolunteerAssignment } from "../../models/volunteerAssignment.model";
 import { Case } from "../../models/case.model";
+import { CaseDocument } from "../../models/caseDocument.model";
 import { AssistanceRequest } from "../../models/assistanceRequest.model";
 import { CaseTimeline } from "../../models/caseTimeline.model";
 import { Role } from "../../models/role.model";
@@ -12,6 +13,7 @@ import { hashPassword } from "../../lib/password.service";
 import { issueTokenPair, DeviceInfo } from "../../lib/session.service";
 import { notify } from "../../lib/notify.service";
 import { writeAuditLog } from "../../lib/audit.service";
+import { uploadBuffer } from "../../lib/cloudinary";
 import {
   VolunteerStatus,
   VolunteerAvailability,
@@ -19,6 +21,7 @@ import {
   VolunteerBloodGroup,
   VolunteerSchedulePreference,
   VolunteerPreferredRole,
+  DocumentType,
 } from "../../utils/constants";
 import { compactFilter } from "../../utils/compactFilter";
 import { decryptField, maybeDecrypt } from "../../lib/crypto";
@@ -269,6 +272,56 @@ export async function getMyAssignmentDetail(userId: string, assignmentId: string
     caseManager: caseManager ? { name: caseManager.name, phone: caseManager.phone } : null,
     timeline: timeline.map((t) => ({ event: t.event, toStatus: t.toStatus, note: t.note, at: t.at })),
   };
+}
+
+/**
+ * A volunteer uploading a document/photo (e.g. cremation proof) for one of their own assignments —
+ * scoped exactly like getMyAssignmentDetail (ownership checked via the Volunteer→VolunteerAssignment
+ * link, never trusted from the client). Otherwise identical to case.service.ts's addCaseDocument,
+ * since a volunteer's upload is functionally the same operation an admin's is, just reached from a
+ * different, ownership-scoped entry point.
+ */
+export async function uploadAssignmentDocument(
+  userId: string,
+  assignmentId: string,
+  file: Express.Multer.File,
+  docType: DocumentType,
+  isProof: boolean
+) {
+  const volunteer = await findMyVolunteerProfile(userId);
+
+  const assignment = await VolunteerAssignment.findOne({ _id: assignmentId, volunteerId: volunteer._id });
+  if (!assignment) throw ApiError.notFound("Assignment not found");
+
+  const kase = await Case.findById(assignment.caseId);
+  if (!kase) throw ApiError.notFound("Case not found");
+
+  const { url, publicId } = await uploadBuffer(file.buffer, `moksha-sewa/cases/${kase.caseId}`);
+
+  const document = await CaseDocument.create({
+    caseId: kase._id,
+    docType,
+    url,
+    cloudinaryPublicId: publicId,
+    fileName: file.originalname,
+    mimeType: file.mimetype,
+    sizeBytes: file.size,
+    isProof,
+    uploadedBy: userId,
+  });
+
+  kase.documentCount += 1;
+  await kase.save();
+
+  await CaseTimeline.create({
+    caseId: kase._id,
+    event: "document.uploaded",
+    note: docType,
+    byUserId: userId,
+    visibility: "INTERNAL",
+  });
+
+  return document;
 }
 
 /** A volunteer accepting/declining their own assignment — deliberately restricted to the

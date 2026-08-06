@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { sendSuccess } from "../../utils/ApiResponse";
+import { ApiError } from "../../utils/ApiError";
 import * as volunteerService from "./volunteer.service";
 import { parsePagination } from "../../utils/pagination";
 import { VolunteerStatus } from "../../utils/constants";
@@ -58,6 +59,18 @@ export const listMyAssignments = asyncHandler(async (req: Request, res: Response
 export const getMyAssignmentDetail = asyncHandler(async (req: Request, res: Response) => {
   const detail = await volunteerService.getMyAssignmentDetail(req.auth!.userId, req.params.assignmentId);
   sendSuccess(res, 200, "Assignment detail fetched", detail);
+});
+
+export const uploadAssignmentDocument = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.file) throw ApiError.badRequest("No file provided");
+  const document = await volunteerService.uploadAssignmentDocument(
+    req.auth!.userId,
+    req.params.assignmentId,
+    req.file,
+    req.body.docType,
+    req.body.isProof
+  );
+  sendSuccess(res, 201, "Document uploaded", document);
 });
 
 export const respondToAssignment = asyncHandler(async (req: Request, res: Response) => {

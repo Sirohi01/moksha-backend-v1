@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authorize, requireAuth, requireUserType } from "../../middlewares/auth.middleware";
 import { validate } from "../../middlewares/validate.middleware";
+import { uploadSingleFile, verifyFileSignature } from "../upload/upload.middleware";
 import * as volunteerController from "./volunteer.controller";
 import {
   assignmentDetailParamsSchema,
@@ -10,6 +11,7 @@ import {
   updateAvailabilitySchema,
   updateMyVolunteerProfileSchema,
   updateVolunteerStatusSchema,
+  uploadAssignmentDocumentSchema,
 } from "./volunteer.validation";
 
 const router = Router();
@@ -40,6 +42,15 @@ router.get(
   requireUserType("VOLUNTEER"),
   validate(assignmentDetailParamsSchema),
   volunteerController.getMyAssignmentDetail
+);
+router.post(
+  "/me/assignments/:assignmentId/documents",
+  requireAuth,
+  requireUserType("VOLUNTEER"),
+  uploadSingleFile,
+  verifyFileSignature,
+  validate(uploadAssignmentDocumentSchema),
+  volunteerController.uploadAssignmentDocument
 );
 router.patch(
   "/me/assignments/:assignmentId/respond",

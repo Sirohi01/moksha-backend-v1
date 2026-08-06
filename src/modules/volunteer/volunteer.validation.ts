@@ -6,8 +6,9 @@ import {
   VOLUNTEER_BLOOD_GROUPS,
   VOLUNTEER_SCHEDULE_PREFERENCES,
   VOLUNTEER_PREFERRED_ROLES,
+  DOCUMENT_TYPES,
 } from "../../utils/constants";
-import { paginationQueryShape } from "../../utils/zodHelpers";
+import { paginationQueryShape, zBoolean } from "../../utils/zodHelpers";
 
 const phoneSchema = z.string().trim().regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit mobile number");
 
@@ -67,6 +68,14 @@ export const updateMyVolunteerProfileSchema = z.object({
 
 export const assignmentDetailParamsSchema = z.object({
   params: z.object({ assignmentId: z.string().trim().min(1) }),
+});
+
+export const uploadAssignmentDocumentSchema = z.object({
+  params: z.object({ assignmentId: z.string().trim().min(1) }),
+  body: z.object({
+    docType: z.enum(DOCUMENT_TYPES),
+    isProof: zBoolean(false),
+  }),
 });
 
 export const respondToAssignmentSchema = z.object({

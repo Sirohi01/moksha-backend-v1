@@ -129,6 +129,17 @@ export async function transitionCaseStatus(
       if (toStatus === "CLOSED") doc.closedAt = new Date();
       await doc.save({ session });
 
+      // A case closing is the natural completion point for every volunteer still actively on it —
+      // there's no separate volunteer-facing "mark complete" action, so this is the one place
+      // ASSIGNMENT_STATUSES' "COMPLETED" value is ever actually reached.
+      if (toStatus === "CLOSED") {
+        await VolunteerAssignment.updateMany(
+          { caseId: doc._id, status: "ACCEPTED" },
+          { status: "COMPLETED", completedAt: new Date() },
+          { session }
+        );
+      }
+
       await CaseTimeline.create(
         [
           {
