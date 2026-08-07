@@ -5,6 +5,7 @@ import { sendSuccess } from "../../utils/ApiResponse";
 import { ApiError } from "../../utils/ApiError";
 import { decryptField, maybeDecrypt } from "../../lib/crypto";
 import { notify } from "../../lib/notify.service";
+import { notifyAdmins } from "../../lib/adminNotify.service";
 
 function serializeEnquiry(enquiry: IEnquiry, reveal: (v: string) => string) {
   const obj = enquiry.toObject();
@@ -21,6 +22,7 @@ export const createEnquiry = asyncHandler(async (req: Request, res: Response) =>
   if (email) {
     await notify("enquiry.received", { email }, { name: req.body.name, message: req.body.message });
   }
+  await notifyAdmins("ENQUIRY", `New enquiry from ${req.body.name}`, req.body.message, "/enquiries");
 
   // The submitter is viewing their own just-sent enquiry — always decrypt, never gated.
   sendSuccess(res, 201, "Thank you for reaching out, we'll contact you shortly", serializeEnquiry(enquiry, decryptField));

@@ -4,6 +4,7 @@ import { decryptField, maybeDecrypt } from "../../lib/crypto";
 import { generateRequestNo } from "../../lib/counter.service";
 import { writeAuditLog } from "../../lib/audit.service";
 import { notify } from "../../lib/notify.service";
+import { notifyAdmins } from "../../lib/adminNotify.service";
 import { geocodeAddress } from "../../lib/geocoding";
 import { logger } from "../../config/logger";
 import { AssistanceRequestStatus, RequestType, DUPLICATE_REQUEST_WINDOW_HOURS } from "../../utils/constants";
@@ -105,6 +106,12 @@ export async function createRequest(input: CreateRequestInput) {
       { name: input.requester.name, requestNo }
     );
   }
+  await notifyAdmins(
+    "CASE",
+    `New assistance request — ${requestNo}`,
+    `${input.requester.name} · ${input.location.city}`,
+    "/requests"
+  );
 
   return serializeRequest(request, decryptField);
 }

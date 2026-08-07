@@ -21,6 +21,7 @@ import partnerRoutes from "../modules/partner/partner.routes";
 import roleRoutes from "../modules/role/role.routes";
 import auditRoutes from "../modules/audit/audit.routes";
 import newsletterRoutes from "../modules/newsletter/newsletter.routes";
+import adminNotificationRoutes from "../modules/adminNotification/adminNotification.routes";
 
 const router = Router();
 
@@ -46,5 +47,6 @@ router.use("/partners", partnerRoutes);
 router.use("/roles", roleRoutes);
 router.use("/audit", auditRoutes);
 router.use("/newsletter", newsletterRoutes);
+router.use("/notifications", adminNotificationRoutes);
 
 export default router;

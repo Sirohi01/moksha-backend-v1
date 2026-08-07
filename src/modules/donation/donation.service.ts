@@ -13,6 +13,7 @@ import { getRazorpayClient } from "../../lib/razorpay";
 import { decryptField, maybeDecrypt } from "../../lib/crypto";
 import { generateReceiptNo } from "../../lib/counter.service";
 import { notify } from "../../lib/notify.service";
+import { notifyAdmins } from "../../lib/adminNotify.service";
 import { writeAuditLog } from "../../lib/audit.service";
 import { compactFilter } from "../../utils/compactFilter";
 import { toPaise, toRupees } from "../../utils/money";
@@ -240,6 +241,12 @@ async function confirmPaymentTransaction(
       { name: donor.name, amount: String(toRupees(donation.amount)) }
     );
   }
+  await notifyAdmins(
+    "DONATION",
+    `New donation — ₹${toRupees(donation.amount).toLocaleString("en-IN")}`,
+    `From ${donor.name}`,
+    "/donations"
+  );
 
   return donation;
 }

@@ -14,6 +14,7 @@ import { issueTokenPair, DeviceInfo } from "../../lib/session.service";
 import { notify } from "../../lib/notify.service";
 import { writeAuditLog } from "../../lib/audit.service";
 import { uploadBuffer } from "../../lib/cloudinary";
+import { notifyAdmins } from "../../lib/adminNotify.service";
 import { geocodeAddress } from "../../lib/geocoding";
 import { logger } from "../../config/logger";
 import {
@@ -206,8 +207,20 @@ export async function getMyProfile(userId: string) {
 
 export async function updateMyAvailability(userId: string, availability: VolunteerAvailability) {
   const volunteer = await findMyVolunteerProfile(userId);
+  const changed = volunteer.availability !== availability;
   volunteer.availability = availability;
   await volunteer.save();
+
+  if (changed) {
+    const user = await User.findById(userId).select("name");
+    await notifyAdmins(
+      "VOLUNTEER",
+      `${user?.name ?? "A volunteer"} is now ${availability.charAt(0) + availability.slice(1).toLowerCase()}`,
+      `${volunteer.city}`,
+      "/volunteers"
+    );
+  }
+
   return volunteer;
 }
 
