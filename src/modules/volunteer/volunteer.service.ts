@@ -14,6 +14,8 @@ import { issueTokenPair, DeviceInfo } from "../../lib/session.service";
 import { notify } from "../../lib/notify.service";
 import { writeAuditLog } from "../../lib/audit.service";
 import { uploadBuffer } from "../../lib/cloudinary";
+import { geocodeAddress } from "../../lib/geocoding";
+import { logger } from "../../config/logger";
 import {
   VolunteerStatus,
   VolunteerAvailability,
@@ -44,6 +46,20 @@ interface RegisterVolunteerInput {
   experience?: string;
   schedulePreference?: VolunteerSchedulePreference;
   preferredRole?: VolunteerPreferredRole;
+}
+
+/** Deliberately NOT awaited by callers — same "never block the caller" reasoning as
+ * request.service.ts's createRequest geocoding call. Falls back to just `city` when no street
+ * address is on file (registration's own address field is optional), since a city-level pin is
+ * still useful for the nearest-volunteer/map features even without a precise address. */
+function geocodeVolunteerAsync(volunteerId: string, location: { address?: string; city: string; state?: string; pincode?: string }): void {
+  const query = [location.address, location.city, location.state, location.pincode, "India"].filter(Boolean).join(", ");
+  geocodeAddress(query)
+    .then((coords) => {
+      if (!coords) return;
+      return Volunteer.findByIdAndUpdate(volunteerId, { lat: coords.lat, lng: coords.lng });
+    })
+    .catch((err) => logger.error("geocodeVolunteerAsync(): background geocoding failed", { err, volunteerId }));
 }
 
 /** PRD FR-VOL-01 — public volunteer sign-up. Creates the unified User (userType VOLUNTEER, role
@@ -107,6 +123,8 @@ export async function registerVolunteer(input: RegisterVolunteerInput, deviceInf
     name: input.name,
     city: input.city,
   });
+
+  geocodeVolunteerAsync(volunteer!._id.toString(), { address: input.address, city: input.city, state: input.state, pincode: input.pincode });
 
   const { accessToken, refreshToken } = await issueTokenPair(user!._id.toString(), env.JWT_REFRESH_EXPIRY, deviceInfo);
 
@@ -204,6 +222,12 @@ interface UpdateMyVolunteerProfileInput {
 }
 export async function updateMyVolunteerProfile(userId: string, input: UpdateMyVolunteerProfileInput) {
   const volunteer = await findMyVolunteerProfile(userId);
+  const locationChanged =
+    (input.city !== undefined && input.city !== volunteer.city) ||
+    input.address !== undefined ||
+    input.state !== undefined ||
+    input.pincode !== undefined;
+
   if (input.city !== undefined) volunteer.city = input.city;
   if (input.skills !== undefined) volunteer.skills = input.skills;
   if (input.address !== undefined) volunteer.address = input.address;
@@ -212,6 +236,17 @@ export async function updateMyVolunteerProfile(userId: string, input: UpdateMyVo
   if (input.schedulePreference !== undefined) volunteer.schedulePreference = input.schedulePreference;
   if (input.preferredRole !== undefined) volunteer.preferredRole = input.preferredRole;
   await volunteer.save();
+
+  // Only re-geocode when a location field actually changed — no point re-hitting Nominatim (and
+  // burning its shared 1/sec budget) for e.g. a skills-only edit.
+  if (locationChanged) {
+    geocodeVolunteerAsync(volunteer._id.toString(), {
+      address: volunteer.address ? decryptField(volunteer.address) : undefined,
+      city: volunteer.city,
+      state: volunteer.state,
+      pincode: volunteer.pincode,
+    });
+  }
 
   const obj = volunteer.toObject();
   return { ...obj, address: obj.address ? decryptField(obj.address) : obj.address };

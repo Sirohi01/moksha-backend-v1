@@ -100,6 +100,16 @@ export const getSlaBreaches = asyncHandler(async (_req: Request, res: Response) 
   sendSuccess(res, 200, "SLA breaches fetched", breaches);
 });
 
+export const getNearestVolunteers = asyncHandler(async (req: Request, res: Response) => {
+  const volunteers = await caseService.listNearestVolunteersForCase(req.params.id);
+  sendSuccess(res, 200, "Nearest volunteers fetched", volunteers);
+});
+
+export const getCasesMapData = asyncHandler(async (_req: Request, res: Response) => {
+  const pins = await caseService.getCasesMapData();
+  sendSuccess(res, 200, "Case map data fetched", pins);
+});
+
 export const getCaseSummary = asyncHandler(async (req: Request, res: Response) => {
   const html = await caseService.renderCaseSummaryHtml(req.params.id);
   res.type("html").send(html);

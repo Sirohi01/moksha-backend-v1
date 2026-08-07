@@ -30,10 +30,12 @@ router.get(
   validate(listCasesQuerySchema),
   caseController.listCasesAdmin
 );
-// Must come before /admin/:id — otherwise Express would swallow "sla-breaches" as the :id param.
+// Must come before /admin/:id — otherwise Express would swallow "sla-breaches"/"map-data" as the :id param.
 router.get("/admin/sla-breaches", requireAuth, authorize("cases.read"), caseController.getSlaBreaches);
+router.get("/admin/map-data", requireAuth, authorize("cases.read"), caseController.getCasesMapData);
 router.get("/admin/:id", requireAuth, authorize("cases.read"), caseController.getCaseAdmin);
 router.get("/admin/:id/summary", requireAuth, authorize("cases.read"), caseController.getCaseSummary);
+router.get("/admin/:id/nearest-volunteers", requireAuth, authorize("cases.assign"), caseController.getNearestVolunteers);
 
 router.patch(
   "/admin/:id/status",

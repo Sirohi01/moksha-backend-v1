@@ -4,6 +4,8 @@ import { decryptField, maybeDecrypt } from "../../lib/crypto";
 import { generateRequestNo } from "../../lib/counter.service";
 import { writeAuditLog } from "../../lib/audit.service";
 import { notify } from "../../lib/notify.service";
+import { geocodeAddress } from "../../lib/geocoding";
+import { logger } from "../../config/logger";
 import { AssistanceRequestStatus, RequestType, DUPLICATE_REQUEST_WINDOW_HOURS } from "../../utils/constants";
 import { compactFilter } from "../../utils/compactFilter";
 import { PaginationParams, buildMeta } from "../../utils/pagination";
@@ -75,6 +77,21 @@ export async function createRequest(input: CreateRequestInput) {
   const requestNo = await generateRequestNo();
   const duplicate = await checkForDuplicate(input.requester.phone, input.deceased.name);
   const request = await AssistanceRequest.create({ ...input, requestNo, source: "WEBSITE", ...duplicate });
+
+  // Deliberately NOT awaited — geocodeAddress() is a real network round-trip (throttled to
+  // 1/sec across the whole app, see geocoding.ts), and this must never make a grieving family
+  // wait on it just to submit a request. Best-effort: the request works fully without
+  // coordinates, they just enable map/nearest-volunteer features once they land.
+  geocodeAddress(
+    [input.location.address, input.location.area, input.location.city, input.location.state, input.location.pincode, "India"]
+      .filter(Boolean)
+      .join(", ")
+  )
+    .then((coords) => {
+      if (!coords) return;
+      return AssistanceRequest.findByIdAndUpdate(request._id, { "location.lat": coords.lat, "location.lng": coords.lng });
+    })
+    .catch((err) => logger.error("createRequest(): background geocoding failed", { err }));
 
   await writeAuditLog({
     action: "request.created",

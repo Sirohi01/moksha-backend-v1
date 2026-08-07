@@ -40,6 +40,11 @@ export interface IVolunteer extends Document {
   experience?: string;
   schedulePreference?: VolunteerSchedulePreference;
   preferredRole?: VolunteerPreferredRole;
+  // Best-effort, filled in asynchronously by geocoding.ts after registration/profile updates —
+  // plain (not encrypted), same "operationally necessary" carve-out as city/state/pincode: needed
+  // directly for nearest-volunteer distance ranking.
+  lat?: number;
+  lng?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -62,6 +67,8 @@ const volunteerSchema = new Schema<IVolunteer>(
     experience: { type: String, trim: true },
     schedulePreference: { type: String, enum: VOLUNTEER_SCHEDULE_PREFERENCES },
     preferredRole: { type: String, enum: VOLUNTEER_PREFERRED_ROLES },
+    lat: { type: Number },
+    lng: { type: Number },
   },
   { timestamps: true }
 );

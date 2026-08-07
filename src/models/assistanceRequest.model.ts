@@ -37,6 +37,12 @@ export interface IAssistanceRequest extends Document {
     city: string;
     state: string;
     pincode: string;
+    // Best-effort, filled in asynchronously by geocoding.ts after creation — plain (not
+    // encrypted) for the same reason city/state/pincode are: needed directly for distance
+    // computation (nearest-volunteer ranking) and map rendering, the same "operationally
+    // necessary" carve-out already documented below for those fields.
+    lat?: number;
+    lng?: number;
   };
   cremationPreference?: "WOOD" | "ELECTRIC" | "AS_AVAILABLE";
   notes?: string;
@@ -80,6 +86,8 @@ const assistanceRequestSchema = new Schema<IAssistanceRequest>(
       city: { type: String, required: true, trim: true, index: true },
       state: { type: String, required: true, trim: true },
       pincode: { type: String, required: true, trim: true },
+      lat: { type: Number },
+      lng: { type: Number },
     },
     cremationPreference: { type: String, enum: ["WOOD", "ELECTRIC", "AS_AVAILABLE"] },
     notes: { type: String, trim: true },

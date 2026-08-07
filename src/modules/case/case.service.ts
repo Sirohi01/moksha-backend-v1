@@ -12,6 +12,7 @@ import { ApiError } from "../../utils/ApiError";
 import { generateCaseId } from "../../lib/counter.service";
 import { writeAuditLog } from "../../lib/audit.service";
 import { uploadBuffer } from "../../lib/cloudinary";
+import { distanceKm } from "../../lib/geocoding";
 import { decryptField, maybeDecrypt } from "../../lib/crypto";
 import { notify } from "../../lib/notify.service";
 import { CASE_STATUS_LABELS } from "../../utils/statusLabels";
@@ -383,6 +384,74 @@ export async function withdrawVolunteerAssignment(
   }
 
   return assignment;
+}
+
+/** PRD G1 — ranks active volunteers by distance from the case's pickup location, using whatever
+ * coordinates geocoding.ts has managed to fill in (both the case's request and each volunteer are
+ * geocoded best-effort and asynchronously — see request.service.ts's createRequest and
+ * volunteer.service.ts's geocodeVolunteerAsync). Volunteers without coordinates yet aren't
+ * excluded — they sort after every ranked volunteer, alphabetically, so a volunteer who just
+ * hasn't been geocoded yet doesn't silently disappear from the assign-volunteer picker. */
+export async function listNearestVolunteersForCase(caseId: string) {
+  const kase = await Case.findById(caseId);
+  if (!kase) throw ApiError.notFound("Case not found");
+
+  const request = await AssistanceRequest.findById(kase.requestId).select("location.lat location.lng");
+  const origin =
+    request?.location.lat != null && request?.location.lng != null
+      ? { lat: request.location.lat, lng: request.location.lng }
+      : null;
+
+  const volunteers = await Volunteer.find({ status: "ACTIVE" });
+  const users = await User.find({ _id: { $in: volunteers.map((v) => v.userId) } }).select("name phone");
+  const userById = new Map(users.map((u) => [u._id.toString(), u]));
+
+  const ranked = volunteers.map((v) => {
+    const user = userById.get(v.userId.toString());
+    const hasCoords = v.lat != null && v.lng != null;
+    const km = origin && hasCoords ? distanceKm(origin, { lat: v.lat!, lng: v.lng! }) : null;
+    return {
+      _id: v._id,
+      name: user?.name,
+      phone: user?.phone,
+      city: v.city,
+      availability: v.availability,
+      totalAssignments: v.totalAssignments,
+      distanceKm: km !== null ? Math.round(km * 10) / 10 : null,
+    };
+  });
+
+  ranked.sort((a, b) => {
+    if (a.distanceKm !== null && b.distanceKm !== null) return a.distanceKm - b.distanceKm;
+    if (a.distanceKm !== null) return -1;
+    if (b.distanceKm !== null) return 1;
+    return (a.name ?? "").localeCompare(b.name ?? "");
+  });
+
+  return ranked;
+}
+
+/** PRD G1 — case pins for the admin dashboard map. Only open (non-terminal) cases, and only ones
+ * geocoding has actually resolved coordinates for yet — a case with no pin is simply omitted
+ * rather than plotted at some meaningless default location. */
+export async function getCasesMapData() {
+  const cases = await Case.find({ status: { $nin: ["CLOSED", "REJECTED", "CANCELLED"] } }).select(
+    "caseId status priority city requestId"
+  );
+  const requests = await AssistanceRequest.find({ _id: { $in: cases.map((c) => c.requestId) } }).select(
+    "location.lat location.lng"
+  );
+  const requestById = new Map(requests.map((r) => [r._id.toString(), r]));
+
+  return cases
+    .map((c) => {
+      const request = requestById.get(c.requestId.toString());
+      const lat = request?.location.lat;
+      const lng = request?.location.lng;
+      if (lat == null || lng == null) return null;
+      return { _id: c._id.toString(), caseId: c.caseId, status: c.status, priority: c.priority, city: c.city, lat, lng };
+    })
+    .filter((pin): pin is NonNullable<typeof pin> => pin !== null);
 }
 
 export async function addCaseDocument(
