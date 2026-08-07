@@ -84,15 +84,17 @@ export async function convertRequestToCase(
     entityId: kase!._id.toString(),
     after: { caseId: kase!.caseId, requestId },
   });
+  const request = await AssistanceRequest.findById(requestId);
+  if (request?.requester.email) {
+    await notify(
+      "family.case_created",
+      { email: decryptField(request.requester.email) },
+      { requesterName: request.requester.name, caseId: kase!.caseId, requestNo: request.requestNo }
+    );
+  }
 
   return kase!;
 }
-
-/** PRD §8.3 — the only place a case's `status` field is ever written. Enforces
- * CASE_STATUS_TRANSITIONS and, for the CLOSED transition specifically, BR-03 (a case cannot close
- * without at least one proof document and with no expense still awaiting approval). Every
- * transition writes a FAMILY-visible timeline entry — the family watching their own case should
- * see every status change, even ones like REJECTED/CANCELLED. */
 export async function transitionCaseStatus(
   caseId: string,
   toStatus: CaseStatus,
@@ -656,18 +658,45 @@ export async function getCaseForAdmin(caseId: string) {
 }
 
 /**
- * PRD FR-REQ-05 — public tracking, no login. Looks up by Case ID + the requester's phone (the
- * one lookup key that's never encrypted). On any mismatch — unknown caseId OR wrong phone — this
- * throws the exact same "not found" error, so a wrong-phone guess can't be used to confirm that a
- * given Case ID exists (a real data-leakage vector for a public, unauthenticated endpoint).
- * Returns only FAMILY-visible fields: no caseManagerId, verification notes, totalExpense, or
- * internal timeline entries ever reach this response.
+ * PRD FR-REQ-05 — public tracking, no login. Accepts EITHER a Case ID (MS-...) or the original
+ * Request Number (REQ-...), both matched against the requester's phone (the one lookup key
+ * that's never encrypted). This dual lookup exists because a family is only ever shown their
+ * Request Number right after submitting — they have no way to know the Case ID a Case Manager
+ * later creates unless the "family.case_created" notification actually reaches them, so the
+ * tracking page has to work with whichever reference the family actually has on hand.
+ *
+ * On any mismatch — unknown reference OR wrong phone, at either lookup step — this throws the
+ * exact same "not found" error, so a wrong-phone guess can't be used to confirm that a given
+ * Case ID/Request Number exists (a real data-leakage vector for a public, unauthenticated
+ * endpoint). Returns only FAMILY-visible fields: no caseManagerId, verification notes,
+ * totalExpense, or internal timeline entries ever reach this response.
  */
-export async function trackCase(caseId: string, phone: string) {
-  const notFound = () => ApiError.notFound("We couldn't find a case with that ID and phone number");
+export async function trackCase(reference: string, phone: string) {
+  const notFound = () => ApiError.notFound("We couldn't find a request or case with that ID and phone number");
 
-  const kase = await Case.findOne({ caseId });
-  if (!kase) throw notFound();
+  let kase = await Case.findOne({ caseId: reference });
+
+  if (!kase) {
+    // Not a known Case ID — try it as the original Request Number instead.
+    const request = await AssistanceRequest.findOne({ requestNo: reference });
+    if (!request || request.requester.phone !== phone) throw notFound();
+
+    if (request.status !== "CONVERTED") {
+      // Genuinely nothing to track yet — still under review (or was rejected) and no Case
+      // exists. This is the honest, useful answer, not an error: the family typed a real,
+      // recognized reference, there's just no case-level timeline behind it yet.
+      return {
+        caseId: null,
+        requestNo: request.requestNo,
+        status: request.status,
+        createdAt: request.createdAt,
+        timeline: [],
+      };
+    }
+
+    kase = await Case.findOne({ requestId: request._id });
+    if (!kase) throw notFound(); // shouldn't happen — CONVERTED implies a case was created
+  }
 
   const request = await AssistanceRequest.findById(kase.requestId);
   if (!request || request.requester.phone !== phone) throw notFound();
@@ -676,6 +705,7 @@ export async function trackCase(caseId: string, phone: string) {
 
   return {
     caseId: kase.caseId,
+    requestNo: request.requestNo,
     status: kase.status,
     scheduledAt: kase.scheduledAt,
     completedAt: kase.completedAt,

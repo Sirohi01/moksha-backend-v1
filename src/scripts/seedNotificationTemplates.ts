@@ -117,6 +117,17 @@ const TEMPLATES: TemplateSeed[] = [
       pLast("Please log in to your volunteer dashboard to accept or decline this assignment."),
   },
   {
+    key: "family.case_created",
+    channel: "EMAIL",
+    category: "TRANSACTIONAL",
+    subject: "Your case is being set up — {{caseId}}",
+    body:
+      p("Namaste {{requesterName}},") +
+      p("Our team has begun working on your request. Please save this Case ID — use it (with your phone number) to track progress any time:") +
+      callout("{{caseId}}") +
+      pLast("Your original reference {{requestNo}} will also still work for tracking."),
+  },
+  {
     key: "family.case_status_update",
     channel: "EMAIL",
     category: "TRANSACTIONAL",
