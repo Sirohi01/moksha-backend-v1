@@ -40,9 +40,27 @@ export interface IVolunteer extends Document {
   experience?: string;
   schedulePreference?: VolunteerSchedulePreference;
   preferredRole?: VolunteerPreferredRole;
-  // Best-effort, filled in asynchronously by geocoding.ts after registration/profile updates —
-  // plain (not encrypted), same "operationally necessary" carve-out as city/state/pincode: needed
-  // directly for nearest-volunteer distance ranking.
+  whatsappPhone?: string;
+  occupation?: string;
+  organisation?: string;
+  volunteerAreas: string[];
+  availabilityDays: string[];
+  preferredTimes: string[];
+  emergencyOnCall?: boolean;
+  canParticipateFieldCases?: boolean;
+  ownVehicle?: boolean;
+  languagesKnown?: string;
+  hoursPerWeek?: string;
+  volunteeredBefore?: boolean;
+  previousOrganisationRole?: string;
+  emergencyContact?: { name?: string; relationship?: string; phone?: string };
+  idProofType?: string;
+  idProofNumber?: string;
+  declarationAccepted?: boolean;
+  photographUrl?: string;
+  photographPublicId?: string;
+  idProofUrl?: string;
+  idProofPublicId?: string;
   lat?: number;
   lng?: number;
   createdAt: Date;
@@ -67,6 +85,31 @@ const volunteerSchema = new Schema<IVolunteer>(
     experience: { type: String, trim: true },
     schedulePreference: { type: String, enum: VOLUNTEER_SCHEDULE_PREFERENCES },
     preferredRole: { type: String, enum: VOLUNTEER_PREFERRED_ROLES },
+    whatsappPhone: { type: String, trim: true },
+    occupation: { type: String, trim: true },
+    organisation: { type: String, trim: true },
+    volunteerAreas: { type: [String], default: [] },
+    availabilityDays: { type: [String], default: [] },
+    preferredTimes: { type: [String], default: [] },
+    emergencyOnCall: { type: Boolean },
+    canParticipateFieldCases: { type: Boolean },
+    ownVehicle: { type: Boolean },
+    languagesKnown: { type: String, trim: true },
+    hoursPerWeek: { type: String, trim: true },
+    volunteeredBefore: { type: Boolean },
+    previousOrganisationRole: { type: String, trim: true },
+    emergencyContact: {
+      name: { type: String, trim: true },
+      relationship: { type: String, trim: true },
+      phone: { type: String, trim: true },
+    },
+    idProofType: { type: String, trim: true },
+    idProofNumber: { type: String, trim: true },
+    declarationAccepted: { type: Boolean, default: false },
+    photographUrl: { type: String },
+    photographPublicId: { type: String },
+    idProofUrl: { type: String },
+    idProofPublicId: { type: String },
     lat: { type: Number },
     lng: { type: Number },
   },

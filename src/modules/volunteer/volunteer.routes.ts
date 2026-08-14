@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { authorize, requireAuth, requireUserType } from "../../middlewares/auth.middleware";
 import { validate } from "../../middlewares/validate.middleware";
-import { uploadSingleFile, verifyFileSignature } from "../upload/upload.middleware";
+import { uploadSingleFile, verifyFileSignature, uploadVolunteerFiles, verifyVolunteerFiles, normalizeVolunteerMultipart } from "../upload/upload.middleware";
 import * as volunteerController from "./volunteer.controller";
 import {
   assignmentDetailParamsSchema,
@@ -17,7 +17,7 @@ import {
 const router = Router();
 
 // Public — volunteer sign-up
-router.post("/register", validate(registerVolunteerSchema), volunteerController.registerVolunteer);
+router.post("/register", uploadVolunteerFiles, verifyVolunteerFiles, normalizeVolunteerMultipart, validate(registerVolunteerSchema), volunteerController.registerVolunteer);
 
 // Self-service (the volunteer themselves)
 router.get("/me", requireAuth, requireUserType("VOLUNTEER"), volunteerController.getMyProfile);
@@ -69,6 +69,8 @@ router.get(
   volunteerController.listVolunteersAdmin
 );
 router.get("/admin/:id", requireAuth, authorize("volunteers.read"), volunteerController.getVolunteerAdmin);
+router.get("/admin/:id/print", requireAuth, authorize("volunteers.read"), volunteerController.printVolunteerAdmin);
+router.get("/admin/:id/pdf", requireAuth, authorize("volunteers.read"), volunteerController.downloadVolunteerPdfAdmin);
 router.patch(
   "/admin/:id/status",
   requireAuth,

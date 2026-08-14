@@ -5,9 +5,15 @@ import { ApiError } from "../../utils/ApiError";
 import * as volunteerService from "./volunteer.service";
 import { parsePagination } from "../../utils/pagination";
 import { VolunteerStatus } from "../../utils/constants";
+import { uploadBuffer } from "../../lib/cloudinary";
 
 export const registerVolunteer = asyncHandler(async (req: Request, res: Response) => {
-  const result = await volunteerService.registerVolunteer(req.body, {
+  const files = req.files as Record<string, Express.Multer.File[]>;
+  const [photograph, idProof] = await Promise.all([
+    uploadBuffer(files.photograph[0].buffer, "moksha-sewa/volunteers/photographs"),
+    uploadBuffer(files.idProof[0].buffer, "moksha-sewa/volunteers/id-proofs"),
+  ]);
+  const result = await volunteerService.registerVolunteer({ ...req.body, photographUrl: photograph.url, photographPublicId: photograph.publicId, idProofUrl: idProof.url, idProofPublicId: idProof.publicId }, {
     userAgent: req.headers["user-agent"],
     ip: req.ip,
   });
@@ -29,6 +35,18 @@ export const listVolunteersAdmin = asyncHandler(async (req: Request, res: Respon
 export const getVolunteerAdmin = asyncHandler(async (req: Request, res: Response) => {
   const volunteer = await volunteerService.getVolunteerForAdmin(req.params.id);
   sendSuccess(res, 200, "Volunteer fetched", volunteer);
+});
+
+export const printVolunteerAdmin = asyncHandler(async (req: Request, res: Response) => {
+  const html = await volunteerService.getVolunteerPrintHtml(req.params.id);
+  res.type("html").send(html);
+});
+
+export const downloadVolunteerPdfAdmin = asyncHandler(async (req: Request, res: Response) => {
+  const pdf = await volunteerService.getVolunteerPdf(req.params.id);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="moksha-sewa-volunteer-${req.params.id}.pdf"`);
+  res.send(pdf);
 });
 
 export const updateVolunteerStatusAdmin = asyncHandler(async (req: Request, res: Response) => {
