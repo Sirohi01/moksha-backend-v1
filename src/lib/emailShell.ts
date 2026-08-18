@@ -33,7 +33,7 @@ export function renderEmailShell(bodyHtml: string): string {
         <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:560px;max-width:100%;background-color:${BRAND.card};border:1px solid ${BRAND.border};">
           <tr>
             <td bgcolor="${BRAND.accent}" style="background-color:${BRAND.accent};padding:20px 28px;">
-              <span style="color:#ffffff;font-size:18px;line-height:24px;font-weight:bold;font-family:${BRAND.font};">
+              <span style="color:#ffffff;font-size:18px;line-height:24px;font-weight:semibold;font-family:${BRAND.font};">
                 Moksha Sewa
               </span>
               <div style="color:#f3ead9;font-size:11px;line-height:16px;font-family:${BRAND.font};margin-top:2px;">

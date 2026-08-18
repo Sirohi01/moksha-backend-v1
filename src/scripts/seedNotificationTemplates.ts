@@ -26,7 +26,7 @@ function callout(innerHtml: string): string {
   return (
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 18px 0;">` +
     `<tr><td bgcolor="#f3ead9" style="background-color:#f3ead9;border:1px solid #e7d9c0;padding:12px 16px;` +
-    `font-size:15px;font-weight:bold;color:#8b6a3e;font-family:${FONT};">${innerHtml}</td></tr></table>`
+    `font-size:15px;font-weight:semibold;color:#8b6a3e;font-family:${FONT};">${innerHtml}</td></tr></table>`
   );
 }
 
@@ -45,7 +45,7 @@ function button(url: string, label: string): string {
   return (
     `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 18px 0;">` +
     `<tr><td bgcolor="#8b6a3e" style="background-color:#8b6a3e;">` +
-    `<a href="${url}" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:bold;` +
+    `<a href="${url}" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:semibold;` +
     `color:#ffffff;text-decoration:none;font-family:${FONT};">${label}</a>` +
     `</td></tr></table>`
   );
