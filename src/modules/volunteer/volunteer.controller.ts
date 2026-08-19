@@ -60,6 +60,16 @@ export const updateVolunteerStatusAdmin = asyncHandler(async (req: Request, res:
   sendSuccess(res, 200, "Volunteer status updated", volunteer);
 });
 
+export const updateVolunteerOfficeUseAdmin = asyncHandler(async (req: Request, res: Response) => {
+  const volunteer = await volunteerService.updateVolunteerOfficeUse(req.params.id, req.body, req.auth!.userId);
+  sendSuccess(res, 200, "Volunteer record updated", volunteer);
+});
+
+export const deleteVolunteerAdmin = asyncHandler(async (req: Request, res: Response) => {
+  await volunteerService.deleteVolunteer(req.params.id, req.auth!.userId);
+  sendSuccess(res, 200, "Volunteer deleted", null);
+});
+
 export const getMyProfile = asyncHandler(async (req: Request, res: Response) => {
   const volunteer = await volunteerService.getMyProfile(req.auth!.userId);
   sendSuccess(res, 200, "Profile fetched", volunteer);

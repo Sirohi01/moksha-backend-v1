@@ -31,3 +31,8 @@ export async function generateReceiptNo(): Promise<string> {
   const seq = await getNextSequence(`receipt:${year}`);
   return `MS/80G/${year}/${String(seq).padStart(6, "0")}`;
 }
+export async function generateVolunteerCode(): Promise<string> {
+  const year = new Date().getFullYear();
+  const seq = await getNextSequence(`volunteer:${year}`);
+  return `MSV-${year}-${String(seq).padStart(6, "0")}`;
+}

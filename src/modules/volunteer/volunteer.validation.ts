@@ -71,6 +71,18 @@ export const updateAvailabilitySchema = z.object({
   body: z.object({ availability: z.enum(VOLUNTEER_AVAILABILITY) }),
 });
 
+// approvedBy/approvedAt are deliberately not accepted here — they're derived server-side from
+// req.auth (the acting admin), never client-supplied, so "who approved this" can't be spoofed.
+export const updateVolunteerOfficeUseSchema = z.object({
+  params: z.object({ id: z.string().trim().min(1) }),
+  body: z.object({
+    verified: z.boolean().optional(),
+    assignedRole: z.string().trim().max(120).optional().or(z.literal("")),
+    assignedArea: z.string().trim().max(120).optional().or(z.literal("")),
+    joiningDate: z.coerce.date().optional().nullable(),
+  }),
+});
+
 export const updateMyVolunteerProfileSchema = z.object({
   body: z.object({
     city: z.string().trim().min(2, "City is required").optional(),

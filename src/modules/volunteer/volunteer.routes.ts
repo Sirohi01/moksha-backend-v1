@@ -10,6 +10,7 @@ import {
   respondToAssignmentSchema,
   updateAvailabilitySchema,
   updateMyVolunteerProfileSchema,
+  updateVolunteerOfficeUseSchema,
   updateVolunteerStatusSchema,
   uploadAssignmentDocumentSchema,
 } from "./volunteer.validation";
@@ -77,6 +78,19 @@ router.patch(
   authorize("volunteers.update"),
   validate(updateVolunteerStatusSchema),
   volunteerController.updateVolunteerStatusAdmin
+);
+router.patch(
+  "/admin/:id/office-use",
+  requireAuth,
+  authorize("volunteers.update"),
+  validate(updateVolunteerOfficeUseSchema),
+  volunteerController.updateVolunteerOfficeUseAdmin
+);
+router.delete(
+  "/admin/:id",
+  requireAuth,
+  authorize("volunteers.update"),
+  volunteerController.deleteVolunteerAdmin
 );
 
 export default router;

@@ -14,17 +14,10 @@ import {
   VOLUNTEER_PREFERRED_ROLES,
 } from "../utils/constants";
 import { encryptFieldsOnSave } from "../lib/fieldEncryption";
-
-/** PRD §11.4 "volunteers" — a profile extension on top of the unified `users` collection (the
- * user's own name/phone/email/auth live there; this holds only what's volunteer-specific). One
- * Volunteer document per User with userType "VOLUNTEER", enforced by the unique index below.
- * dateOfBirth/gender/bloodGroup/address/state/pincode/motivation/experience/schedulePreference/
- * preferredRole are captured once at registration (the volunteer intake form) — address is PII
- * and encrypted at rest like every other street-address field in this codebase; state/pincode
- * stay plain alongside the existing `city` for filtering. */
 export interface IVolunteer extends Document {
   _id: Types.ObjectId;
   userId: Types.ObjectId;
+  code?: string;
   city: string;
   skills: string[];
   status: VolunteerStatus;
@@ -63,6 +56,16 @@ export interface IVolunteer extends Document {
   idProofPublicId?: string;
   lat?: number;
   lng?: number;
+  // Office-use fields, admin-managed (PRD-adjacent addition — printed on the registration form's
+  // "For Office Use Only" section instead of being blank lines for hand-filling after printing).
+  verified: boolean;
+  assignedRole?: string;
+  assignedArea?: string;
+  approvedByUserId?: Types.ObjectId;
+  approvedAt?: Date;
+  // Defaults to the registration date (createdAt) unless an admin explicitly overrides it —
+  // resolved at read time in volunteer.service.ts, not stored redundantly here.
+  joiningDate?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -70,6 +73,9 @@ export interface IVolunteer extends Document {
 const volunteerSchema = new Schema<IVolunteer>(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, unique: true },
+    // sparse: true — volunteers registered before this field existed have no code, and a plain
+    // unique index would treat every one of those "missing" values as the same null and collide.
+    code: { type: String, unique: true, sparse: true },
     city: { type: String, required: true, trim: true, index: true },
     skills: { type: [String], default: [] },
     status: { type: String, enum: VOLUNTEER_STATUSES, default: "ACTIVE", index: true },
@@ -112,6 +118,12 @@ const volunteerSchema = new Schema<IVolunteer>(
     idProofPublicId: { type: String },
     lat: { type: Number },
     lng: { type: Number },
+    verified: { type: Boolean, default: false },
+    assignedRole: { type: String, trim: true },
+    assignedArea: { type: String, trim: true },
+    approvedByUserId: { type: Schema.Types.ObjectId, ref: "User" },
+    approvedAt: { type: Date },
+    joiningDate: { type: Date },
   },
   { timestamps: true }
 );

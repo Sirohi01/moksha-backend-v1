@@ -16,6 +16,7 @@ import { writeAuditLog } from "../../lib/audit.service";
 import { uploadBuffer } from "../../lib/cloudinary";
 import { notifyAdmins } from "../../lib/adminNotify.service";
 import { geocodeAddress } from "../../lib/geocoding";
+import { generateVolunteerCode } from "../../lib/counter.service";
 import { logger } from "../../config/logger";
 import {
   VolunteerStatus,
@@ -25,6 +26,7 @@ import {
   VolunteerSchedulePreference,
   VolunteerPreferredRole,
   DocumentType,
+  ACTIVE_ASSIGNMENT_STATUSES,
 } from "../../utils/constants";
 import { compactFilter } from "../../utils/compactFilter";
 import { decryptField, maybeDecrypt } from "../../lib/crypto";
@@ -96,10 +98,15 @@ export async function registerVolunteer(input: RegisterVolunteerInput, deviceInf
       );
       user = createdUsers[0];
 
+      // Sequence generation deliberately sits outside strict transactional atomicity — same
+      // reasoning as generateCaseId(): a gap on abort is fine, reuse is not, and the atomic $inc
+      // in getNextSequence already guarantees the latter on its own.
+      const code = await generateVolunteerCode();
       const createdVolunteers = await Volunteer.create(
         [
           {
             userId: user._id,
+            code,
             city: input.city,
             skills: input.skills,
             dateOfBirth: input.dateOfBirth,
@@ -169,13 +176,25 @@ export async function listVolunteersForAdmin(
     query,
     pagination?.requested ? Volunteer.countDocuments(mongoFilter) : Promise.resolve(undefined),
   ]);
-  const users = await User.find({ _id: { $in: volunteers.map((v) => v.userId) } }).select("name phone email");
+  const approverIds = volunteers.map((v) => v.approvedByUserId).filter((id): id is mongoose.Types.ObjectId => Boolean(id));
+  const [users, approvers] = await Promise.all([
+    User.find({ _id: { $in: volunteers.map((v) => v.userId) } }).select("name phone email"),
+    approverIds.length ? User.find({ _id: { $in: approverIds } }).select("name") : Promise.resolve([]),
+  ]);
   const userById = new Map(users.map((u) => [u._id.toString(), u]));
+  const approverNameById = new Map(approvers.map((u) => [u._id.toString(), u.name]));
 
   const items = volunteers.map((v) => {
     const u = userById.get(v.userId.toString());
     const obj = v.toObject();
-    return { ...obj, address: obj.address ? maybeDecrypt(obj.address) : obj.address, name: u?.name, phone: u?.phone, email: u?.email };
+    return {
+      ...obj,
+      address: obj.address ? maybeDecrypt(obj.address) : obj.address,
+      name: u?.name,
+      phone: u?.phone,
+      email: u?.email,
+      approvedByName: v.approvedByUserId ? approverNameById.get(v.approvedByUserId.toString()) : undefined,
+    };
   });
   const meta = pagination?.requested ? buildMeta(pagination.page, pagination.limit, total!) : undefined;
   return { volunteers: items, meta };
@@ -184,12 +203,101 @@ export async function listVolunteersForAdmin(
 async function getVolunteerWithUser(volunteerId: string) {
   const volunteer = await Volunteer.findById(volunteerId);
   if (!volunteer) throw ApiError.notFound("Volunteer not found");
-  const user = await User.findById(volunteer.userId).select("name phone email");
+  const [user, approvedByUser] = await Promise.all([
+    User.findById(volunteer.userId).select("name phone email"),
+    volunteer.approvedByUserId ? User.findById(volunteer.approvedByUserId).select("name") : Promise.resolve(null),
+  ]);
   const obj = volunteer.toObject();
-  return { ...obj, address: obj.address ? maybeDecrypt(obj.address) : obj.address, name: user?.name, phone: user?.phone, email: user?.email };
+  return {
+    ...obj,
+    address: obj.address ? maybeDecrypt(obj.address) : obj.address,
+    name: user?.name,
+    phone: user?.phone,
+    email: user?.email,
+    approvedByName: approvedByUser?.name,
+    // Falls back to the registration date so the printed form always has a joining date even
+    // when an admin hasn't explicitly overridden it (PRD ask: "the day they filled the form is
+    // the joining date unless we set it separately").
+    joiningDate: obj.joiningDate ?? obj.createdAt,
+  };
 }
 
 export const getVolunteerForAdmin = getVolunteerWithUser;
+
+/** Removes a volunteer's profile and their login account together — leaving the Volunteer profile
+ * deleted but the User account behind would orphan a VOLUNTEER-type login with no profile to
+ * resolve (findMyVolunteerProfile would 404 on every self-service call). Blocked while the
+ * volunteer still has a live case assignment so deleting them can't silently strand a case. */
+export async function deleteVolunteer(volunteerId: string, actorUserId: string): Promise<void> {
+  const volunteer = await Volunteer.findById(volunteerId);
+  if (!volunteer) throw ApiError.notFound("Volunteer not found");
+
+  const hasActiveAssignment = await VolunteerAssignment.exists({
+    volunteerId: volunteer._id,
+    status: { $in: ACTIVE_ASSIGNMENT_STATUSES },
+  });
+  if (hasActiveAssignment) {
+    throw ApiError.conflict(
+      "This volunteer has an active case assignment. Withdraw or resolve it before deleting their profile."
+    );
+  }
+
+  await Volunteer.deleteOne({ _id: volunteer._id });
+  await User.deleteOne({ _id: volunteer.userId });
+
+  await writeAuditLog({
+    userId: actorUserId,
+    action: "volunteer.deleted",
+    entityType: "Volunteer",
+    entityId: volunteer._id.toString(),
+    before: volunteer.toObject(),
+  });
+}
+
+/** Admin-managed "For Office Use Only" fields — printed on the registration form. approvedBy is
+ * deliberately never client-settable: it's stamped with the acting admin's own account the moment
+ * they mark a volunteer verified, and cleared if verification is revoked, so it can't be spoofed
+ * or left stale. */
+export async function updateVolunteerOfficeUse(
+  volunteerId: string,
+  input: { verified?: boolean; assignedRole?: string; assignedArea?: string; joiningDate?: Date | null },
+  actorUserId: string
+) {
+  const volunteer = await Volunteer.findById(volunteerId);
+  if (!volunteer) throw ApiError.notFound("Volunteer not found");
+
+  if (input.assignedRole !== undefined) volunteer.assignedRole = input.assignedRole || undefined;
+  if (input.assignedArea !== undefined) volunteer.assignedArea = input.assignedArea || undefined;
+  if (input.joiningDate !== undefined) volunteer.joiningDate = input.joiningDate ?? undefined;
+
+  if (input.verified !== undefined && input.verified !== volunteer.verified) {
+    volunteer.verified = input.verified;
+    if (input.verified) {
+      volunteer.approvedByUserId = new mongoose.Types.ObjectId(actorUserId);
+      volunteer.approvedAt = new Date();
+    } else {
+      volunteer.approvedByUserId = undefined;
+      volunteer.approvedAt = undefined;
+    }
+  }
+
+  await volunteer.save();
+
+  await writeAuditLog({
+    userId: actorUserId,
+    action: "volunteer.office_use_updated",
+    entityType: "Volunteer",
+    entityId: volunteer._id.toString(),
+    after: {
+      verified: volunteer.verified,
+      assignedRole: volunteer.assignedRole,
+      assignedArea: volunteer.assignedArea,
+      joiningDate: volunteer.joiningDate,
+    },
+  });
+
+  return getVolunteerWithUser(volunteerId);
+}
 const volunteerPrintHeader = `data:image/png;base64,${readFileSync(join(process.cwd(), "assets", "volunteer-print-header.png")).toString("base64")}`;
 
 
@@ -222,31 +330,142 @@ export function renderVolunteerPrintHtml(v: any) {
 
 export async function getVolunteerPdf(volunteerId: string): Promise<Buffer> {
   const v: any = await getVolunteerWithUser(volunteerId);
+  return renderVolunteerPdf(v);
+}
+export function renderVolunteerPdf(v: any): Promise<Buffer> {
   const doc = new PDFDocument({ size: "A4", margin: 18, bufferPages: true, info: { Title: `Moksha Sewa Volunteer - ${v.name}` } });
   const chunks: Buffer[] = [];
   doc.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
   const done = new Promise<Buffer>((resolve, reject) => { doc.on("end", () => resolve(Buffer.concat(chunks))); doc.on("error", reject); });
   const W = 559, x = 18;
-  doc.image(join(process.cwd(), "assets", "volunteer-print-header.png"), x, 18, { width: W, height: 125 });
-  doc.roundedRect(205, 25, 190, 17, 8).lineWidth(.6).strokeColor("#d89920").stroke().font("Helvetica-Bold").fontSize(8).fillColor("#111").text("An Initiative by Namo Gange Trust", 218, 30, { width: 165, align: "center" });
-  doc.font("Times-Bold").fontSize(27).fillColor("#650b0b").text("MOKSHA SEWA", 165, 49, { width: 270, align: "center" });
-  doc.font("Helvetica-Bold").fontSize(14).fillColor("#e3470b").text("VOLUNTEER REGISTRATION FORM", 150, 78, { width: 300, align: "center" });
-  doc.fontSize(8).fillColor("#681717").text("SEVA  •  SAMMAN  •  ANTIM GARIMA", 170, 96, { width: 260, align: "center" });
-  doc.font("Helvetica").fontSize(7).fillColor("#111").text("Join hands in our mission to provide dignified last rites and end-of-life support to the unclaimed and the needy.", 160, 111, { width: 280, align: "center" });
   const colors = { blue: "#123d7a", orange: "#ea4e0b", green: "#417817", purple: "#502287", teal: "#087789", red: "#681313", brown: "#92520d" };
+
+  // ---- Header ----
+  // The banner image now has the logo, title, subtitle and tagline baked into it directly — no
+  // vector text/logo overlay needed on top. Height is derived from the image's own aspect ratio
+  // (rather than an arbitrary fixed height) so the baked-in typography isn't stretched.
+  const headerImage = join(process.cwd(), "assets", "volunteer-print-header.png");
+  const headerNaturalH = Math.round(W * (724 / 2172)); // ~186 at true aspect ratio
+  // A few points shy of the true aspect ratio (~7%) — the exact ratio pushes the rest of the form
+  // past one A4 page even after tightening every section below; this is a small enough trim that
+  // the baked-in banner text is still effectively undistorted.
+  const headerH = headerNaturalH - 14;
+  doc.image(headerImage, x, 18, { width: W, height: headerH });
+
   const section = (sx: number, sy: number, sw: number, sh: number, color: string, title: string) => { doc.roundedRect(sx, sy, sw, sh, 6).lineWidth(.7).strokeColor(color).stroke(); doc.roundedRect(sx, sy, Math.min(sw, 230), 15, 6).fillColor(color).fill(); doc.rect(sx, sy + 8, Math.min(sw, 230), 7).fill(); doc.font("Helvetica-Bold").fontSize(7.2).fillColor("white").text(title, sx + 7, sy + 4, { width: sw - 14 }); };
-  const text = (label: string, value: unknown, tx: number, ty: number, tw: number) => { doc.font("Helvetica-Bold").fontSize(5.6).fillColor("#102650").text(label, tx, ty, { width: tw }); doc.font("Helvetica").fontSize(6.3).fillColor("#111").text(String(value ?? "—"), tx, ty + 7, { width: tw, height: 15, ellipsis: true }); };
-  const grid = (items: [string, unknown][], gx: number, gy: number, gw: number, cols: number, rowH: number) => items.forEach(([l, val], i) => { const cw = gw / cols, c = Math.floor(i % cols), r = Math.floor(i / cols), px = gx + c * cw, py = gy + r * rowH; doc.rect(px, py, cw, rowH).lineWidth(.25).strokeColor("#bbc4d1").stroke(); text(l, val, px + 5, py + 4, cw - 10) });
-  section(x, 147, W, 122, colors.blue, "A. PERSONAL DETAILS"); grid([["Full Name*", v.name], ["Date of Birth", v.dateOfBirth ? new Date(v.dateOfBirth).toLocaleDateString("en-IN") : "—"], ["Gender", v.gender], ["Mobile No.*", v.phone], ["WhatsApp No.", v.whatsappPhone], ["Email ID", v.email], ["City / District*", v.city], ["State*", v.state], ["PIN Code", v.pincode], ["Occupation / Profession", v.occupation], ["Organisation / Institution", v.organisation], ["Address", v.address]], x, 162, W, 3, 26);
-  section(x, 275, 272, 282, colors.orange, "B. HOW WOULD YOU LIKE TO SERVE?"); doc.font("Helvetica-Bold").fontSize(6.5).fillColor(colors.orange).text("Preferred Area of Volunteering", x + 8, 295); const service = ["Field Volunteer", "Hospital & Authority Coordination", "Cremation & Ritual Assistance", "Unclaimed Body Support", "Economically Weaker Family Support", "24x7 Helpline Support", "Ambulance / Logistics Support", "Documentation & Case Support", "Community Awareness", "Social Media / Digital Volunteering", "Photography / Videography / Content", "Fundraising & Donor Outreach", "Professional / Pro-Bono Support", "Events & Campaign Support"]; service.forEach((s, i) => { const checked = (v.volunteerAreas || []).includes(s); doc.rect(x + 9, 310 + i * 14, 7, 7).strokeColor("#68758a").stroke(); if (checked) doc.font("Helvetica-Bold").fontSize(7).fillColor(colors.orange).text("x", x + 10, 308 + i * 14); doc.font("Helvetica").fontSize(6.1).fillColor("#111").text(s, x + 21, 308 + i * 14, { width: 240 }) }); text("Preferred Role", v.preferredRole, x + 9, 514, 250);
-  const rx = 296, rw = 281; section(rx, 275, rw, 126, colors.blue, "C. AVAILABILITY"); grid([["Availability", (v.availabilityDays || []).join(", ")], ["Preferred Time", (v.preferredTimes || []).join(", ")], ["Schedule", v.schedulePreference], ["Emergency / On-Call", v.emergencyOnCall ? "Yes" : "No"], ["Field Cases", v.canParticipateFieldCases ? "Yes" : "No"], ["Own Vehicle", v.ownVehicle ? "Yes" : "No"], ["Languages", v.languagesKnown], ["Hours / Week", v.hoursPerWeek]], rx, 290, rw, 2, 27);
-  section(rx, 407, rw, 150, colors.green, "D. SKILLS & EXPERIENCE"); grid([["Relevant Skills", (v.skills || []).join(", ")], ["Volunteered with NGO", v.volunteeredBefore ? "Yes" : "No"], ["Organisation & Role", v.previousOrganisationRole], ["Why join Moksha Sewa?", v.motivation], ["Experience", v.experience]], rx, 422, rw, 2, 39);
-  const by = 563, bh = 125; section(x, by, 175, bh, colors.purple, "E. EMERGENCY CONTACT"); grid([["Contact Person", v.emergencyContact?.name], ["Relationship", v.emergencyContact?.relationship], ["Mobile No.", v.emergencyContact?.phone]], x, by + 15, 175, 1, 30);
-  section(199, by, 175, bh, colors.teal, "F. IDENTITY VERIFICATION"); grid([["ID Proof Type", v.idProofType], ["ID Proof No.", v.idProofNumber], ["Attachments", `${v.photographUrl ? "Photo ✓" : "Photo —"}  ${v.idProofUrl ? "ID Proof ✓" : "ID Proof —"}`]], 199, by + 15, 175, 1, 30);
-  section(380, by, 197, bh, colors.red, "G. VOLUNTEER DECLARATION"); doc.font("Helvetica").fontSize(5.7).fillColor("#111").text("I voluntarily wish to associate with Moksha Sewa for humanitarian and social service. I agree to follow its policies, code of conduct, confidentiality, safety instructions and authorised coordinators, and to maintain dignity, privacy and religious/cultural sensitivity.", 387, 585, { width: 183, lineGap: 1 }); doc.font("Helvetica-Bold").fontSize(5.8).text(v.declarationAccepted ? "✓ Declaration accepted" : "Declaration not accepted", 387, 650, { width: 183 }); doc.font("Helvetica").fontSize(5.5).text(`Applicant Signature: ______________   Date: ${new Date(v.createdAt).toLocaleDateString("en-IN")}`, 387, 668, { width: 183 });
-  section(x, 694, W, 65, colors.brown, "FOR OFFICE USE ONLY"); grid([["Volunteer ID", v._id], ["Verification", "□ Verified"], ["Assigned Role", ""], ["Assigned Area", ""], ["Status", v.status], ["Approved By", ""], ["Joining / Orientation Date", ""]], x, 709, W, 5, 23);
-  doc.roundedRect(x, 765, W, 42, 5).fillColor("#6d0909").fill(); doc.font("Helvetica-Bold").fontSize(10).fillColor("white").text("24x7 ASSISTANCE HELPLINE: 9654900525", x + 13, 780, { width: 260 }); doc.fontSize(7).text("SEVA • SAMMAN • ANTIM GARIMA", x + 330, 781, { width: 210, align: "right" });
-  doc.end(); return done;
+  const text = (label: string, value: unknown, tx: number, ty: number, tw: number, opts?: { height?: number; ellipsis?: boolean }) => {
+    const h = opts?.height ?? 15, ell = opts?.ellipsis ?? true;
+    doc.font("Helvetica-Bold").fontSize(5.6).fillColor("#102650").text(label, tx, ty, { width: tw });
+    doc.font("Helvetica").fontSize(6.3).fillColor("#111").text(String(value ?? "—") || "—", tx, ty + 7, { width: tw, height: h, ellipsis: ell });
+  };
+  const grid = (items: [string, unknown][], gx: number, gy: number, gw: number, cols: number, rowH: number, opts?: { height?: number; ellipsis?: boolean }) =>
+    items.forEach(([l, val], i) => { const cw = gw / cols, c = i % cols, r = Math.floor(i / cols), px = gx + c * cw, py = gy + r * rowH; doc.rect(px, py, cw, rowH).lineWidth(.25).strokeColor("#bbc4d1").stroke(); text(l, val, px + 5, py + 4, cw - 10, opts); });
+  // Vector checkmark, not a font glyph — pdfkit's built-in Helvetica can't encode "✓" (it
+  // silently prints garbage for it), and a drawn mark is trivially centered inside its own box
+  // instead of depending on font-metric guesswork.
+  const checkbox = (bx: number, by: number, checked: boolean) => {
+    doc.rect(bx, by, 7, 7).lineWidth(.6).strokeColor("#68758a").stroke();
+    if (checked) { doc.save(); doc.lineWidth(1.1).strokeColor(colors.orange).moveTo(bx + 1.4, by + 3.8).lineTo(bx + 3, by + 5.6).lineTo(bx + 5.8, by + 1.4).stroke(); doc.restore(); }
+  };
+
+  // ---- A. Personal details ----
+  const aY = 18 + headerH + 9;
+  const aItems: [string, unknown][] = [
+    ["Full Name*", v.name], ["Date of Birth", v.dateOfBirth ? new Date(v.dateOfBirth).toLocaleDateString("en-IN") : "—"],
+    ["Gender", v.gender], ["Blood Group", v.bloodGroup], ["Mobile No.*", v.phone], ["WhatsApp No.", v.whatsappPhone],
+    ["Email ID", v.email], ["City / District*", v.city], ["State*", v.state], ["PIN Code", v.pincode],
+    ["Occupation / Profession", v.occupation], ["Organisation / Institution", v.organisation],
+  ];
+  const aCols = 3, aRowH = 24, aGridH = Math.ceil(aItems.length / aCols) * aRowH; // 12 items -> 4 rows, no remainder
+  const addrRowH = 28;
+  const aH = 15 + aGridH + addrRowH;
+  section(x, aY, W, aH, colors.blue, "A. PERSONAL DETAILS");
+  grid(aItems, x, aY + 15, W, aCols, aRowH);
+  const addrY = aY + 15 + aGridH;
+  doc.rect(x, addrY, W, addrRowH).lineWidth(.25).strokeColor("#bbc4d1").stroke();
+  doc.font("Helvetica-Bold").fontSize(5.6).fillColor("#102650").text("Address", x + 6, addrY + 4, { width: W - 12 });
+  doc.font("Helvetica").fontSize(6.3).fillColor("#111").text(v.address || "—", x + 6, addrY + 11, { width: W - 12, height: 20 });
+
+  // ---- B/C row ----
+  const row2Y = aY + aH + 5;
+  const bW = 272, cGap = 6, cX = x + bW + cGap, cW = W - bW - cGap;
+
+  const cRowH = 24, cH = 15 + 4 * cRowH;
+  section(cX, row2Y, cW, cH, colors.blue, "C. AVAILABILITY");
+  grid([
+    ["Availability", (v.availabilityDays || []).join(", ")], ["Preferred Time", (v.preferredTimes || []).join(", ")],
+    ["Schedule", v.schedulePreference], ["Emergency / On-Call", v.emergencyOnCall ? "Yes" : "No"],
+    ["Field Cases", v.canParticipateFieldCases ? "Yes" : "No"], ["Own Vehicle", v.ownVehicle ? "Yes" : "No"],
+    ["Languages", v.languagesKnown], ["Hours / Week", v.hoursPerWeek],
+  ], cX, row2Y + 15, cW, 2, cRowH);
+
+  // "Why join" / "Experience" are free-text answers that can run to a full paragraph — a
+  // half-width grid cell isn't enough room, so they each get their own full-width wrapped row
+  // below the compact 2-col grid (same pattern as the Address row in section A).
+  const dGridItems: [string, unknown][] = [
+    ["Relevant Skills", (v.skills || []).join(", ")], ["Volunteered with NGO", v.volunteeredBefore ? "Yes" : "No"],
+    ["Organisation & Role", v.previousOrganisationRole],
+  ];
+  const dGridRowH = 22, dGridRows = Math.ceil(dGridItems.length / 2), dGridH = dGridRows * dGridRowH;
+  const dWideRowH = 40;
+  const dY = row2Y + cH + 5, dH = 15 + dGridH + dWideRowH * 2;
+  section(cX, dY, cW, dH, colors.green, "D. SKILLS & EXPERIENCE");
+  grid(dGridItems, cX, dY + 15, cW, 2, dGridRowH);
+  const motivY = dY + 15 + dGridH;
+  doc.rect(cX, motivY, cW, dWideRowH).lineWidth(.25).strokeColor("#bbc4d1").stroke();
+  text("Why join Moksha Sewa?", v.motivation, cX + 5, motivY + 4, cW - 10, { height: dWideRowH - 9, ellipsis: false });
+  const expY = motivY + dWideRowH;
+  doc.rect(cX, expY, cW, dWideRowH).lineWidth(.25).strokeColor("#bbc4d1").stroke();
+  text("Experience", v.experience, cX + 5, expY + 4, cW - 10, { height: dWideRowH - 9, ellipsis: false });
+
+  const bH = dY + dH - row2Y; // bottom-align B with D regardless of either one's exact height
+  section(x, row2Y, bW, bH, colors.orange, "B. HOW WOULD YOU LIKE TO SERVE?");
+  doc.font("Helvetica-Bold").fontSize(6.5).fillColor(colors.orange).text("Preferred Area of Volunteering", x + 8, row2Y + 18);
+  const service = ["Field Volunteer", "Hospital & Authority Coordination", "Cremation & Ritual Assistance", "Unclaimed Body Support", "Economically Weaker Family Support", "24x7 Helpline Support", "Ambulance / Logistics Support", "Documentation & Case Support", "Community Awareness", "Social Media / Digital Volunteering", "Photography / Videography / Content", "Fundraising & Donor Outreach", "Professional / Pro-Bono Support", "Events & Campaign Support"];
+  const checkRowH = 13;
+  const checkTop = row2Y + 32;
+  service.forEach((s, i) => {
+    const by = checkTop + i * checkRowH;
+    checkbox(x + 9, by, (v.volunteerAreas || []).includes(s));
+    doc.font("Helvetica").fontSize(6.1).fillColor("#111").text(s, x + 21, by - 1, { width: 240 });
+  });
+  text("Preferred Role", v.preferredRole, x + 9, checkTop + service.length * checkRowH + 4, 250);
+
+  // ---- E/F/G row ----
+  const row3Y = dY + dH + 6, bh3 = 112;
+  section(x, row3Y, 175, bh3, colors.purple, "E. EMERGENCY CONTACT");
+  grid([["Contact Person", v.emergencyContact?.name], ["Relationship", v.emergencyContact?.relationship], ["Mobile No.", v.emergencyContact?.phone]], x, row3Y + 15, 175, 1, 30);
+  section(199, row3Y, 175, bh3, colors.teal, "F. IDENTITY VERIFICATION");
+  grid([
+    ["ID Proof Type", v.idProofType], ["ID Proof No.", v.idProofNumber],
+    ["Attachments", `Photo: ${v.photographUrl ? "Yes" : "No"}   ID Proof: ${v.idProofUrl ? "Yes" : "No"}`],
+  ], 199, row3Y + 15, 175, 1, 30);
+  section(380, row3Y, 197, bh3, colors.red, "G. VOLUNTEER DECLARATION");
+  doc.font("Helvetica").fontSize(5.7).fillColor("#111").text("I voluntarily wish to associate with Moksha Sewa for humanitarian and social service. I agree to follow its policies, code of conduct, confidentiality, safety instructions and authorised coordinators, and to maintain dignity, privacy and religious/cultural sensitivity.", 387, row3Y + 20, { width: 183, lineGap: 1 });
+  doc.font("Helvetica-Bold").fontSize(5.8).text(v.declarationAccepted ? "Declaration accepted" : "Declaration not accepted", 387, row3Y + 58, { width: 183 });
+  doc.font("Helvetica").fontSize(5.5).text(`Applicant Signature: ______________   Date: ${new Date(v.createdAt).toLocaleDateString("en-IN")}`, 387, row3Y + 76, { width: 183 });
+
+  // ---- Office use ----
+  const row4Y = row3Y + bh3 + 6, officeH = 63;
+  section(x, row4Y, W, officeH, colors.brown, "FOR OFFICE USE ONLY");
+  grid([
+    ["Volunteer ID", v.code || v._id],
+    ["Verification", v.verified ? "Verified" : "Pending"],
+    ["Assigned Role", v.assignedRole],
+    ["Assigned Area", v.assignedArea],
+    ["Status", v.status],
+    ["Approved By", v.approvedByName],
+    ["Joining / Orientation Date", v.joiningDate ? new Date(v.joiningDate).toLocaleDateString("en-IN") : "—"],
+  ], x, row4Y + 15, W, 5, 23);
+
+  // ---- Footer ----
+  const footerY = row4Y + officeH + 6, footerH = 38;
+  doc.roundedRect(x, footerY, W, footerH, 5).fillColor("#6d0909").fill();
+  doc.font("Helvetica-Bold").fontSize(10).fillColor("white").text("24x7 ASSISTANCE HELPLINE: 9654900525", x + 13, footerY + 13, { width: 260 });
+  doc.fontSize(7).text("SEVA - SAMMAN - ANTIM GARIMA", x + 330, footerY + 14, { width: 210, align: "right" });
+
+  doc.end();
+  return done;
 }
 
 export async function updateVolunteerStatus(volunteerId: string, status: VolunteerStatus, actorUserId: string) {
