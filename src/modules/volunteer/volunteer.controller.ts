@@ -18,7 +18,13 @@ export const registerVolunteer = asyncHandler(async (req: Request, res: Response
     ip: req.ip,
   });
   sendSuccess(res, 201, "Welcome to the Moksha Sewa volunteer team", {
-    user: { id: result.user._id, name: result.user.name, phone: result.user.phone, email: result.user.email },
+    user: {
+      id: result.user._id,
+      name: result.user.name,
+      phone: result.user.phone,
+      email: result.user.email,
+      userType: result.user.userType,
+    },
     volunteer: result.volunteer,
     accessToken: result.accessToken,
     refreshToken: result.refreshToken,
