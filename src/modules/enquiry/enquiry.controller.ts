@@ -7,6 +7,7 @@ import { decryptField, maybeDecrypt } from "../../lib/crypto";
 import { notify } from "../../lib/notify.service";
 import { notifyAdmins } from "../../lib/adminNotify.service";
 import { uploadBuffer } from "../../lib/cloudinary";
+import { NotificationTemplate } from "../../models/notificationTemplate.model";
 
 function serializeEnquiry(enquiry: IEnquiry, reveal: (v: string) => string) {
   const obj = enquiry.toObject();
@@ -64,7 +65,8 @@ async function createWebsiteEnquiry(req: Request, category: IEnquiry["category"]
     };
     const templateKey = templateKeys[category];
     if (templateKey) {
-      await notify(templateKey, { email, phone: req.body.phone }, {
+      const activeTemplate = await NotificationTemplate.exists({ key: templateKey, isActive: true });
+      await notify(activeTemplate ? templateKey : "enquiry.received", { email, phone: req.body.phone }, {
         name: req.body.name,
         organization: req.body.organization || "",
         city: req.body.city || "",
