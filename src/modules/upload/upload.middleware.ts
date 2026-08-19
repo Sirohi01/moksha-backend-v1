@@ -53,3 +53,12 @@ export function verifyFileSignature(req: Request, _res: Response, next: NextFunc
 
   next();
 }
+
+export function verifyOptionalFileSignature(req: Request, _res: Response, next: NextFunction): void {
+  if (!req.file) return next();
+  const detected = detectFileType(req.file.buffer);
+  if (!detected || !ALLOWED_UPLOAD_MIME_TYPES.has(detected.mime)) {
+    return next(ApiError.badRequest("Unsupported or unrecognized file type"));
+  }
+  next();
+}
