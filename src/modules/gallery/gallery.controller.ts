@@ -14,10 +14,10 @@ export const listPublicGallery = asyncHandler(async (req: Request, res: Response
 
 export const registerDownload = asyncHandler(async (req: Request, res: Response) => {
   const item = await GalleryItem.findOneAndUpdate(
-    { _id: req.params.id, type: "image", isActive: true },
+    { _id: req.params.id, isActive: true },
     { $inc: { downloadCount: 1 } },
     { new: true }
   ).select("url downloadCount");
-  if (!item) throw ApiError.notFound("Gallery image not found");
+  if (!item) throw ApiError.notFound("Gallery item not found");
   sendSuccess(res, 200, "Download registered", { url: item.url, downloadCount: item.downloadCount });
 });
