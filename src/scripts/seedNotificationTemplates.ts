@@ -87,6 +87,39 @@ const TEMPLATES: TemplateSeed[] = [
       pLast("If your matter is urgent, please call our helpline directly."),
   },
   {
+    key: "csr.enquiry_received",
+    channel: "EMAIL",
+    category: "TRANSACTIONAL",
+    subject: "CSR partnership enquiry received — Moksha Sewa",
+    body:
+      p("Namaste {{name}},") +
+      p("Thank you for considering a responsible CSR collaboration with Moksha Sewa. We have received your enquiry for {{organization}}.") +
+      callout("Your CSR partnership enquiry is under review") +
+      pLast("Our team will review the information and contact you through the details provided."),
+  },
+  {
+    key: "partnership.enquiry_received",
+    channel: "EMAIL",
+    category: "TRANSACTIONAL",
+    subject: "Partnership enquiry received — Moksha Sewa",
+    body:
+      p("Namaste {{name}},") +
+      p("Thank you for reaching out to explore a partnership with Moksha Sewa. We have received your proposal for {{organization}}.") +
+      callout("Your partnership enquiry is under review") +
+      pLast("Our team will study the proposal and contact you shortly."),
+  },
+  {
+    key: "unclaimed_body.request_received",
+    channel: "EMAIL",
+    category: "TRANSACTIONAL",
+    subject: "Unclaimed Body Sewa request received — Moksha Sewa",
+    body:
+      p("Namaste {{name}},") +
+      p("We have received your Unclaimed Body Sewa request for {{city}}. Our team will review the case information, applicable formalities and available authorisation.") +
+      callout("Your Sewa request is under verification") +
+      pLast("Submission does not guarantee acceptance. Our team will contact you if further information or documentation is required."),
+  },
+  {
     key: "user.welcome",
     channel: "EMAIL",
     category: "TRANSACTIONAL",

@@ -43,7 +43,7 @@ export const createUnclaimedBodyEnquirySchema = z.object({
   body: z.object({
     name: z.string().trim().min(2).max(120),
     phone,
-    email: z.string().trim().email().optional().or(z.literal("")),
+    email: z.string().trim().email(),
     city: z.string().trim().min(2).max(180),
     organization: optionalText,
     authority: optionalText,

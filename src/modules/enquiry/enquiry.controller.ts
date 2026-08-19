@@ -56,6 +56,22 @@ async function createWebsiteEnquiry(req: Request, category: IEnquiry["category"]
     unclaimed_body: "Unclaimed-body Sewa request",
   };
   await notifyAdmins("ENQUIRY", `${labels[category]} from ${req.body.name}`, req.body.message, "/enquiries");
+  if (email) {
+    const templateKeys: Partial<Record<IEnquiry["category"], string>> = {
+      csr: "csr.enquiry_received",
+      partnership: "partnership.enquiry_received",
+      unclaimed_body: "unclaimed_body.request_received",
+    };
+    const templateKey = templateKeys[category];
+    if (templateKey) {
+      await notify(templateKey, { email, phone: req.body.phone }, {
+        name: req.body.name,
+        organization: req.body.organization || "",
+        city: req.body.city || "",
+        message: req.body.message,
+      });
+    }
+  }
   return enquiry;
 }
 
