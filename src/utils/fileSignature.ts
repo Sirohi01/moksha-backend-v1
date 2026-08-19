@@ -37,11 +37,14 @@ const SIGNATURES: Signature[] = [
     ext: "webp",
     match: (b) => b.length >= 12 && b.toString("ascii", 0, 4) === "RIFF" && b.toString("ascii", 8, 12) === "WEBP",
   },
+  { mime: "video/mp4", ext: "mp4", match: (b) => b.length >= 12 && b.toString("ascii", 4, 8) === "ftyp" },
+  {
+    mime: "video/webm",
+    ext: "webm",
+    match: (b) => b.length >= 4 && b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3,
+  },
   { mime: "application/pdf", ext: "pdf", match: (b) => b.length >= 5 && b.toString("ascii", 0, 5) === "%PDF-" },
 ];
-
-/** The set of types this platform accepts for case documents, gallery photos, and receipts —
- * intentionally narrow. Extend this list deliberately, not by loosening the signature match. */
 export const ALLOWED_UPLOAD_MIME_TYPES = new Set(SIGNATURES.map((s) => s.mime));
 
 export function detectFileType(buffer: Buffer): DetectedFileType | null {

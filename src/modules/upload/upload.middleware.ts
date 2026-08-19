@@ -6,7 +6,7 @@ import { detectFileType, ALLOWED_UPLOAD_MIME_TYPES } from "../../utils/fileSigna
 /** In-memory storage — files are streamed straight to Cloudinary, never written to disk. */
 export const uploadSingleFile = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
+  limits: { fileSize: 100 * 1024 * 1024 },
 }).single("file");
 
 export const uploadVolunteerFiles = multer({

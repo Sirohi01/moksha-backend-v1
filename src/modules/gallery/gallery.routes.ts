@@ -11,6 +11,7 @@ const adminGuards = [requireAuth, authorize("cms.update")];
 const handlers = buildAdminCrudHandlers(GalleryItem, "Gallery item");
 
 router.get("/", validate(listPublicGallerySchema), galleryController.listPublicGallery);
+router.post("/:id/download", galleryController.registerDownload);
 
 mountAdminCrudRoutes(router, handlers, adminGuards);
 router.post("/admin", ...adminGuards, validate(createGalleryItemSchema), handlers.create);
