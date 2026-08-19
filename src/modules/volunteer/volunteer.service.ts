@@ -279,7 +279,10 @@ export async function getMyProfile(userId: string) {
     name: user?.name,
     phone: user?.phone,
     email: user?.email,
-    avatarUrl: user?.avatarUrl,
+    // Volunteer registration stores the uploaded profile photograph on the volunteer record.
+    // Prefer a user-level avatar when one exists, otherwise expose that uploaded photograph to
+    // the self-service dashboard under its stable `avatarUrl` contract.
+    avatarUrl: user?.avatarUrl || obj.photographUrl,
   };
 }
 
