@@ -12,6 +12,9 @@ import { handleRazorpayWebhook } from "./modules/donation/donation.webhook";
 export function createApp(): Application {
   const app = express();
 
+  // Must be set before any middleware that reads req.ip / X-Forwarded-For (rate limiters below).
+  if (env.TRUST_PROXY > 0) app.set("trust proxy", env.TRUST_PROXY);
+
   app.use(requestIdMiddleware);
   app.use(helmet());
   app.use(

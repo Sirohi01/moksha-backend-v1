@@ -9,6 +9,14 @@ export const uploadSingleFile = multer({
   limits: { fileSize: 100 * 1024 * 1024 },
 }).single("file");
 
+/** Same as uploadSingleFile but for unauthenticated public-form uploads (e.g. unclaimed-body
+ * document). Kept well below the 100MB admin limit so a handful of concurrent anonymous posts
+ * can't buffer enough in-memory data to pressure the process. */
+export const uploadSingleFilePublic = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+}).single("file");
+
 export const uploadVolunteerFiles = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024, files: 2 },

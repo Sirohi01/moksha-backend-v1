@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authorize, requireAuth } from "../../middlewares/auth.middleware";
 import { validate } from "../../middlewares/validate.middleware";
+import { caseTrackLimiter } from "../../middlewares/rateLimiters";
 import { uploadSingleFile, verifyFileSignature } from "../upload/upload.middleware";
 import * as caseController from "./case.controller";
 import {
@@ -20,7 +21,7 @@ import {
 const router = Router();
 
 // Public — Case ID + phone, no login (PRD FR-REQ-05)
-router.get("/track", validate(trackCaseSchema), caseController.trackCase);
+router.get("/track", caseTrackLimiter, validate(trackCaseSchema), caseController.trackCase);
 
 // Admin
 router.get(

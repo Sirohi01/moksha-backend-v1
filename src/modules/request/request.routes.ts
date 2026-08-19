@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authorize, requireAuth } from "../../middlewares/auth.middleware";
 import { validate } from "../../middlewares/validate.middleware";
+import { publicFormLimiter } from "../../middlewares/rateLimiters";
 import * as requestController from "./request.controller";
 import {
   createRequestSchema,
@@ -12,7 +13,7 @@ import { convertRequestSchema } from "../case/case.validation";
 const router = Router();
 
 // Public — a family in crisis submits this with no login
-router.post("/", validate(createRequestSchema), requestController.createRequest);
+router.post("/", publicFormLimiter, validate(createRequestSchema), requestController.createRequest);
 
 // Admin
 router.get(

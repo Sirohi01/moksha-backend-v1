@@ -8,6 +8,13 @@ const envSchema = z.object({
   API_PREFIX: z.string().default("/api/v1"),
   CLIENT_URL: z.string().default("http://localhost:3000"),
   ADMIN_CLIENT_URL: z.string().default("http://localhost:3001"),
+  // Number of reverse-proxy hops in front of this server (Nginx, a cloud load balancer, etc).
+  // Express uses this to trust X-Forwarded-For at that depth only — required for rate limiting
+  // and req.ip to see the real client IP instead of the proxy's. 0 = no proxy (bind directly to
+  // the internet, e.g. local dev). Set to the actual hop count in production; never set to a
+  // value higher than the real number of trusted proxies, or a client could spoof its own IP via
+  // X-Forwarded-For.
+  TRUST_PROXY: z.coerce.number().int().min(0).default(0),
 
   MONGODB_URI: z.string().min(1, "MONGODB_URI is required"),
 

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authorize, requireAuth, requireUserType } from "../../middlewares/auth.middleware";
 import { validate } from "../../middlewares/validate.middleware";
+import { donationLimiter } from "../../middlewares/rateLimiters";
 import * as donationController from "./donation.controller";
 import {
   createDonationSchema,
@@ -15,8 +16,8 @@ import {
 const router = Router();
 
 // Public — donation is a guest checkout, no login required
-router.post("/", validate(createDonationSchema), donationController.createDonation);
-router.post("/verify", validate(verifyDonationSchema), donationController.verifyDonation);
+router.post("/", donationLimiter, validate(createDonationSchema), donationController.createDonation);
+router.post("/verify", donationLimiter, validate(verifyDonationSchema), donationController.verifyDonation);
 
 // Donor self-service
 router.get("/me", requireAuth, requireUserType("DONOR"), donationController.listMyDonations);
