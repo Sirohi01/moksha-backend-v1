@@ -22,7 +22,12 @@ export const createEnquiry = asyncHandler(async (req: Request, res: Response) =>
 
   // Best-effort — email is optional on this form, and notify() never throws anyway.
   if (email) {
-    await notify("enquiry.received", { email }, { name: req.body.name, message: req.body.message });
+    await notify(
+      "enquiry.received",
+      { email },
+      { name: req.body.name, message: req.body.message },
+      { waitForDelivery: true }
+    );
   }
   await notifyAdmins("ENQUIRY", `New enquiry from ${req.body.name}`, req.body.message, "/enquiries");
 

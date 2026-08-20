@@ -111,7 +111,12 @@ export async function attemptDelivery(log: INotificationLog): Promise<void> {
  * can be safely auto-wired. The schema supports channel "WHATSAPP"/"BOTH" so this can be filled
  * in later without a migration; for now that half of a BOTH-channel template is skipped and logged.
  */
-export async function notify(templateKey: string, recipient: NotifyRecipient, variables: Record<string, string> = {}): Promise<void> {
+export async function notify(
+  templateKey: string,
+  recipient: NotifyRecipient,
+  variables: Record<string, string> = {},
+  options: { waitForDelivery?: boolean } = {}
+): Promise<void> {
   try {
     const template = await NotificationTemplate.findOne({ key: templateKey, isActive: true });
     if (!template) {
@@ -176,7 +181,13 @@ export async function notify(templateKey: string, recipient: NotifyRecipient, va
     // contradicting this function's own "never slows down the caller" contract. attemptDelivery()
     // already never throws — it catches everything and persists the outcome to the log entry —
     // so this is a pure background fire-and-forget, not a dropped error path.
-    attemptDelivery(log).catch((err) => {
+    const delivery = attemptDelivery(log);
+    if (options.waitForDelivery) {
+      await delivery;
+      return;
+    }
+
+    delivery.catch((err) => {
       logger.error(`notify(): unexpected failure delivering "${templateKey}"`, { err });
     });
   } catch (err) {
