@@ -13,7 +13,8 @@ export function createApp(): Application {
   const app = express();
 
   // Must be set before any middleware that reads req.ip / X-Forwarded-For (rate limiters below).
-  if (env.TRUST_PROXY > 0) app.set("trust proxy", env.TRUST_PROXY);
+  const trustProxyHops = env.TRUST_PROXY > 0 ? env.TRUST_PROXY : process.env.RENDER === "true" ? 1 : 0;
+  if (trustProxyHops > 0) app.set("trust proxy", trustProxyHops);
 
   app.use(requestIdMiddleware);
   app.use(helmet());
