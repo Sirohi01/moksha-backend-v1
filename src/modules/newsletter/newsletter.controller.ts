@@ -3,6 +3,7 @@ import { NewsletterSubscriber } from "../../models/newsletterSubscriber.model";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { sendSuccess } from "../../utils/ApiResponse";
 import { notify } from "../../lib/notify.service";
+import { sendAdminFormSubmissionEmail } from "../adminEmail/adminEmail.service";
 
 /** Idempotent — re-submitting the same email is a success, not a 409, since the visitor has no
  * way to know whether they already subscribed and shouldn't be shown an error either way. */
@@ -16,6 +17,14 @@ export const subscribe = asyncHandler(async (req: Request, res: Response) => {
   // Only on the actual first subscription — a re-submit shouldn't re-send the confirmation.
   if (result.upsertedCount > 0) {
     await notify("newsletter.subscribed", { email }, {});
+    sendAdminFormSubmissionEmail({
+      formName: "Newsletter / Request Support",
+      userName: email,
+      details: {
+        email,
+        source: req.body.source,
+      },
+    });
   }
   sendSuccess(res, 201, "Thank you — our team will be in touch.", null);
 });

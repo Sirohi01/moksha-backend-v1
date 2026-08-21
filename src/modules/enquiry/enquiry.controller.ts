@@ -8,6 +8,7 @@ import { notify } from "../../lib/notify.service";
 import { notifyAdmins } from "../../lib/adminNotify.service";
 import { uploadBuffer } from "../../lib/cloudinary";
 import { NotificationTemplate } from "../../models/notificationTemplate.model";
+import { sendAdminFormSubmissionEmail } from "../adminEmail/adminEmail.service";
 
 function serializeEnquiry(enquiry: IEnquiry, reveal: (v: string) => string) {
   const obj = enquiry.toObject();
@@ -30,6 +31,19 @@ export const createEnquiry = asyncHandler(async (req: Request, res: Response) =>
     );
   }
   await notifyAdmins("ENQUIRY", `New enquiry from ${req.body.name}`, req.body.message, "/enquiries");
+  sendAdminFormSubmissionEmail({
+    formName: "Contact Enquiry",
+    userName: req.body.name,
+    details: {
+      name: req.body.name,
+      email,
+      phoneNumber: req.body.phone,
+      cityLocation: req.body.city,
+      messagePurpose: req.body.message,
+      ...req.body,
+    },
+    submittedAt: enquiry.createdAt,
+  });
 
   // The submitter is viewing their own just-sent enquiry — always decrypt, never gated.
   sendSuccess(res, 201, "Thank you for reaching out, we'll contact you shortly", serializeEnquiry(enquiry, decryptField));
@@ -62,6 +76,20 @@ async function createWebsiteEnquiry(req: Request, category: IEnquiry["category"]
     unclaimed_body: "Unclaimed-body Sewa request",
   };
   await notifyAdmins("ENQUIRY", `${labels[category]} from ${req.body.name}`, req.body.message, "/enquiries");
+  sendAdminFormSubmissionEmail({
+    formName: labels[category],
+    userName: req.body.name,
+    details: {
+      name: req.body.name,
+      email,
+      phoneNumber: req.body.phone,
+      cityLocation: req.body.city || req.body.location,
+      messagePurpose: req.body.message,
+      ...req.body,
+      documentUrl: document?.url,
+    },
+    submittedAt: enquiry.createdAt,
+  });
   if (email) {
     const templateKeys: Partial<Record<IEnquiry["category"], string>> = {
       csr: "csr.enquiry_received",

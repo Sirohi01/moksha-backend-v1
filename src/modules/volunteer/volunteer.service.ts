@@ -31,6 +31,7 @@ import {
 import { compactFilter } from "../../utils/compactFilter";
 import { decryptField, maybeDecrypt } from "../../lib/crypto";
 import { PaginationParams, buildMeta } from "../../utils/pagination";
+import { sendAdminFormSubmissionEmail } from "../adminEmail/adminEmail.service";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import PDFDocument from "pdfkit";
@@ -153,6 +154,21 @@ export async function registerVolunteer(input: RegisterVolunteerInput, deviceInf
   await notify("volunteer.registered", { userId: user!._id.toString(), email: user!.email }, {
     name: input.name,
     city: input.city,
+  });
+  sendAdminFormSubmissionEmail({
+    formName: "Volunteer Registration",
+    userName: input.name,
+    details: {
+      ...input,
+      password: undefined,
+      volunteerCode: volunteer!.code,
+      name: input.name,
+      email: input.email,
+      phoneNumber: input.phone,
+      cityLocation: input.city,
+      messagePurpose: input.motivation,
+    },
+    submittedAt: volunteer!.createdAt,
   });
 
   geocodeVolunteerAsync(volunteer!._id.toString(), { address: input.address, city: input.city, state: input.state, pincode: input.pincode });

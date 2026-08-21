@@ -10,6 +10,7 @@ import { logger } from "../../config/logger";
 import { AssistanceRequestStatus, RequestType, DUPLICATE_REQUEST_WINDOW_HOURS } from "../../utils/constants";
 import { compactFilter } from "../../utils/compactFilter";
 import { PaginationParams, buildMeta } from "../../utils/pagination";
+import { sendAdminFormSubmissionEmail } from "../adminEmail/adminEmail.service";
 function serializeRequest(request: IAssistanceRequest, reveal: (v: string) => string) {
   const obj = request.toObject();
   if (obj.requester.email) obj.requester.email = reveal(obj.requester.email);
@@ -112,6 +113,20 @@ export async function createRequest(input: CreateRequestInput) {
     `${input.requester.name} · ${input.location.city}`,
     "/requests"
   );
+  sendAdminFormSubmissionEmail({
+    formName: "Assistance Request",
+    userName: input.requester.name,
+    details: {
+      requestNo,
+      name: input.requester.name,
+      email: input.requester.email,
+      phoneNumber: input.requester.phone,
+      cityLocation: input.location.city,
+      messagePurpose: input.notes,
+      ...input,
+    },
+    submittedAt: request.createdAt,
+  });
 
   return serializeRequest(request, decryptField);
 }

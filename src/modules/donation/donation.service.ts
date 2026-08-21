@@ -19,6 +19,7 @@ import { compactFilter } from "../../utils/compactFilter";
 import { toPaise, toRupees } from "../../utils/money";
 import { PaginationParams, buildMeta } from "../../utils/pagination";
 import { DonationCause, DonationFrequency, NewDonationStatus, PaymentMode, SubscriptionStatus } from "../../utils/constants";
+import { sendAdminFormSubmissionEmail } from "../adminEmail/adminEmail.service";
 
 interface DonorInput {
   name: string;
@@ -247,6 +248,25 @@ async function confirmPaymentTransaction(
     `From ${donor.name}`,
     "/donations"
   );
+  sendAdminFormSubmissionEmail({
+    formName: "Donation",
+    userName: donor.name,
+    details: {
+      name: donor.name,
+      email: donor.email,
+      phoneNumber: donor.phone,
+      cityLocation: undefined,
+      messagePurpose: donation.dedication,
+      donationId: donation._id.toString(),
+      amount: `₹${toRupees(donation.amount).toLocaleString("en-IN")}`,
+      cause: donation.cause,
+      type: donation.type,
+      status: donation.status,
+      isAnonymous: donation.isAnonymous,
+      recurringDonationId: donation.recurringDonationId?.toString(),
+    },
+    submittedAt: donation.createdAt,
+  });
 
   return donation;
 }

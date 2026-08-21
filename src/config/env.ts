@@ -47,6 +47,7 @@ const envSchema = z.object({
   SMTP_PASS: z.string().optional(),
   SMTP_FROM_NAME: z.string().default("Moksha Sewa"),
   SMTP_FROM_EMAIL: z.string().default("no-reply@mokshasewa.com"),
+  ADMIN_NOTIFICATION_EMAIL: z.string().trim().email().default("chudharyaman1920@gmail.com"),
 
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),
