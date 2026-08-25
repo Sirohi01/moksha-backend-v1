@@ -3,6 +3,7 @@ import { logger } from "../config/logger";
 import { seedPermissions } from "./seedPermissions";
 import { seedAdmin } from "./seedAdmin";
 import { seedNotificationTemplates } from "./seedNotificationTemplates";
+import { seedLandingPage } from "./seedLandingPage";
 
 /** Runs every seed script against a single shared connection — cheaper than each script opening
  * and closing its own, and the only reliably stable option against a local single-node replica
@@ -12,6 +13,7 @@ async function seedAll(): Promise<void> {
   await seedPermissions();
   await seedAdmin();
   await seedNotificationTemplates();
+  await seedLandingPage();
   await disconnectDB();
 }
 

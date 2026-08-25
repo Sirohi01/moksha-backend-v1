@@ -13,6 +13,7 @@
     "seed:permissions": "tsx src/scripts/seedPermissions.ts",
     "seed:admin": "tsx src/scripts/seedAdmin.ts",
     "seed:notifications": "tsx src/scripts/seedNotificationTemplates.ts",
+    "seed:landing": "tsx src/scripts/seedLandingPage.ts",
     "seed": "tsx src/scripts/seedAll.ts",
     "seed:demo": "tsx src/scripts/seedDemoData.ts",
     "seed:demo:clean": "tsx src/scripts/deleteDemoData.ts",

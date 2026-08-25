@@ -54,10 +54,33 @@ export interface ISetting extends Document {
       regionDescription?: string;
       phoneLabel?: string;
       phoneNumber?: string;
+      contactEmail?: string;
+      contactAddress?: string;
+      availabilityText?: string;
+      actionTitle?: string;
+      requestTitle?: string;
+      requestDescription?: string;
+      inputPlaceholder?: string;
+      submitLabel?: string;
+      submittedLabel?: string;
+      successMessage?: string;
+      initiativeLabel?: string;
+      quickLinksTitle?: string;
+      servicesTitle?: string;
+      initiativesTitle?: string;
+      contactTitle?: string;
       buttonLabel?: string;
       buttonHref?: string;
       secondaryButtonLabel?: string;
       secondaryButtonHref?: string;
+      tertiaryButtonLabel?: string;
+      tertiaryButtonHref?: string;
+      sloganTitle?: string;
+      immediateHelpTitle?: string;
+      immediateHelpDescription?: string;
+      supportNowLabel?: string;
+      supportMissionTitle?: string;
+      supportMissionDescription?: string;
       slides?: {
         title: string;
         description: string;
@@ -76,6 +99,7 @@ export interface ISetting extends Document {
         description?: string;
         image?: string;
         href?: string;
+        features?: string[];
       }[];
     }[];
   };
@@ -147,10 +171,33 @@ const settingSchema = new Schema<ISetting>(
                         regionDescription: { type: String, trim: true },
                         phoneLabel: { type: String, trim: true },
                         phoneNumber: { type: String, trim: true },
+                        contactEmail: { type: String, trim: true },
+                        contactAddress: { type: String, trim: true },
+                        availabilityText: { type: String, trim: true },
+                        actionTitle: { type: String, trim: true },
+                        requestTitle: { type: String, trim: true },
+                        requestDescription: { type: String, trim: true },
+                        inputPlaceholder: { type: String, trim: true },
+                        submitLabel: { type: String, trim: true },
+                        submittedLabel: { type: String, trim: true },
+                        successMessage: { type: String, trim: true },
+                        initiativeLabel: { type: String, trim: true },
+                        quickLinksTitle: { type: String, trim: true },
+                        servicesTitle: { type: String, trim: true },
+                        initiativesTitle: { type: String, trim: true },
+                        contactTitle: { type: String, trim: true },
             buttonLabel: { type: String, trim: true },
             buttonHref: { type: String, trim: true },
             secondaryButtonLabel: { type: String, trim: true },
             secondaryButtonHref: { type: String, trim: true },
+            tertiaryButtonLabel: { type: String, trim: true },
+            tertiaryButtonHref: { type: String, trim: true },
+            sloganTitle: { type: String, trim: true },
+            immediateHelpTitle: { type: String, trim: true },
+            immediateHelpDescription: { type: String, trim: true },
+            supportNowLabel: { type: String, trim: true },
+            supportMissionTitle: { type: String, trim: true },
+            supportMissionDescription: { type: String, trim: true },
             slides: {
               type: [
                 {
@@ -176,6 +223,7 @@ const settingSchema = new Schema<ISetting>(
                   description: { type: String, trim: true },
                   image: { type: String, trim: true },
                   href: { type: String, trim: true },
+                  features: { type: [String], default: [] },
                 },
               ],
               default: [],
