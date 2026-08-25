@@ -27,6 +27,30 @@ export interface ISetting extends Document {
   };
   banners: { image: string; link?: string; title?: string }[];
   socialLinks: { platform: string; url: string }[];
+  landingPage?: {
+    sections: {
+      key: string;
+      name: string;
+      enabled: boolean;
+      eyebrow?: string;
+      title?: string;
+      subtitle?: string;
+      description?: string;
+      image?: string;
+      buttonLabel?: string;
+      buttonHref?: string;
+      secondaryButtonLabel?: string;
+      secondaryButtonHref?: string;
+      items?: {
+        title?: string;
+        label?: string;
+        value?: string;
+        description?: string;
+        image?: string;
+        href?: string;
+      }[];
+    }[];
+  };
   updatedAt: Date;
 }
 
@@ -65,6 +89,40 @@ const settingSchema = new Schema<ISetting>(
         },
       ],
       default: [],
+    },
+    landingPage: {
+      sections: {
+        type: [
+          {
+            key: { type: String, required: true, trim: true },
+            name: { type: String, required: true, trim: true },
+            enabled: { type: Boolean, default: true },
+            eyebrow: { type: String, trim: true },
+            title: { type: String, trim: true },
+            subtitle: { type: String, trim: true },
+            description: { type: String, trim: true },
+            image: { type: String, trim: true },
+            buttonLabel: { type: String, trim: true },
+            buttonHref: { type: String, trim: true },
+            secondaryButtonLabel: { type: String, trim: true },
+            secondaryButtonHref: { type: String, trim: true },
+            items: {
+              type: [
+                {
+                  title: { type: String, trim: true },
+                  label: { type: String, trim: true },
+                  value: { type: String, trim: true },
+                  description: { type: String, trim: true },
+                  image: { type: String, trim: true },
+                  href: { type: String, trim: true },
+                },
+              ],
+              default: [],
+            },
+          },
+        ],
+        default: [],
+      },
     },
   },
   { timestamps: true }
