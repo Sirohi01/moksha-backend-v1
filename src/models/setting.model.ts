@@ -39,6 +39,21 @@ export interface ISetting extends Document {
       image?: string;
       logoImage?: string;
       partnerLogoImage?: string;
+      secondaryLogoImage?: string;
+      secondaryImage?: string;
+      quote?: string;
+      legalNotice?: string;
+      lowerTitle?: string;
+      lowerDescription?: string;
+      bottomStatement?: string;
+      secondaryTitle?: string;
+      secondaryDescription?: string;
+      supportTitle?: string;
+      supportDescription?: string;
+      regionTitle?: string;
+      regionDescription?: string;
+      phoneLabel?: string;
+      phoneNumber?: string;
       buttonLabel?: string;
       buttonHref?: string;
       secondaryButtonLabel?: string;
@@ -117,6 +132,21 @@ const settingSchema = new Schema<ISetting>(
             image: { type: String, trim: true },
             logoImage: { type: String, trim: true },
             partnerLogoImage: { type: String, trim: true },
+            secondaryLogoImage: { type: String, trim: true },
+            secondaryImage: { type: String, trim: true },
+            quote: { type: String, trim: true },
+            legalNotice: { type: String, trim: true },
+            lowerTitle: { type: String, trim: true },
+            lowerDescription: { type: String, trim: true },
+            bottomStatement: { type: String, trim: true },
+                        secondaryTitle: { type: String, trim: true },
+                        secondaryDescription: { type: String, trim: true },
+                        supportTitle: { type: String, trim: true },
+                        supportDescription: { type: String, trim: true },
+                        regionTitle: { type: String, trim: true },
+                        regionDescription: { type: String, trim: true },
+                        phoneLabel: { type: String, trim: true },
+                        phoneNumber: { type: String, trim: true },
             buttonLabel: { type: String, trim: true },
             buttonHref: { type: String, trim: true },
             secondaryButtonLabel: { type: String, trim: true },
