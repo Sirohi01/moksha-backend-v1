@@ -11,6 +11,18 @@ const landingSectionItemSchema = z.object({
   href: z.string().trim().optional(),
 });
 
+const landingHeroSlideSchema = z.object({
+  title: z.string().trim().min(1),
+  description: z.string().trim().min(1),
+  image: z.string().trim().min(1),
+  alt: z.string().trim().min(1),
+  buttonLabel: z.string().trim().optional(),
+  buttonHref: z.string().trim().optional(),
+  secondaryButtonLabel: z.string().trim().optional(),
+  secondaryButtonHref: z.string().trim().optional(),
+  variant: z.enum(["default", "family-support", "journey-prayer", "volunteer-impact"]).optional(),
+});
+
 const landingSectionSchema = z.object({
   key: z.string().trim().min(1),
   name: z.string().trim().min(1),
@@ -20,10 +32,13 @@ const landingSectionSchema = z.object({
   subtitle: z.string().trim().optional(),
   description: z.string().trim().optional(),
   image: z.string().trim().optional(),
+  logoImage: z.string().trim().optional(),
+  partnerLogoImage: z.string().trim().optional(),
   buttonLabel: z.string().trim().optional(),
   buttonHref: z.string().trim().optional(),
   secondaryButtonLabel: z.string().trim().optional(),
   secondaryButtonHref: z.string().trim().optional(),
+  slides: z.array(landingHeroSlideSchema).optional(),
   items: z.array(landingSectionItemSchema).optional(),
 });
 

@@ -37,10 +37,23 @@ export interface ISetting extends Document {
       subtitle?: string;
       description?: string;
       image?: string;
+      logoImage?: string;
+      partnerLogoImage?: string;
       buttonLabel?: string;
       buttonHref?: string;
       secondaryButtonLabel?: string;
       secondaryButtonHref?: string;
+      slides?: {
+        title: string;
+        description: string;
+        image: string;
+        alt: string;
+        buttonLabel?: string;
+        buttonHref?: string;
+        secondaryButtonLabel?: string;
+        secondaryButtonHref?: string;
+        variant?: string;
+      }[];
       items?: {
         title?: string;
         label?: string;
@@ -102,10 +115,28 @@ const settingSchema = new Schema<ISetting>(
             subtitle: { type: String, trim: true },
             description: { type: String, trim: true },
             image: { type: String, trim: true },
+            logoImage: { type: String, trim: true },
+            partnerLogoImage: { type: String, trim: true },
             buttonLabel: { type: String, trim: true },
             buttonHref: { type: String, trim: true },
             secondaryButtonLabel: { type: String, trim: true },
             secondaryButtonHref: { type: String, trim: true },
+            slides: {
+              type: [
+                {
+                  title: { type: String, required: true, trim: true },
+                  description: { type: String, required: true, trim: true },
+                  image: { type: String, required: true, trim: true },
+                  alt: { type: String, required: true, trim: true },
+                  buttonLabel: { type: String, trim: true },
+                  buttonHref: { type: String, trim: true },
+                  secondaryButtonLabel: { type: String, trim: true },
+                  secondaryButtonHref: { type: String, trim: true },
+                  variant: { type: String, trim: true },
+                },
+              ],
+              default: [],
+            },
             items: {
               type: [
                 {
