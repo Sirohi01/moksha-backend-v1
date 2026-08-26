@@ -254,18 +254,15 @@ export type PartnerType = (typeof PARTNER_TYPES)[number];
 
 export const PARTNER_STATUSES = ["LEAD", "ACTIVE", "EXPIRED", "INACTIVE"] as const;
 export type PartnerStatus = (typeof PARTNER_STATUSES)[number];
-
-// Logistics masters (PRD §11.4) — cremation grounds are tracked as a Partner (PARTNER_TYPES
-// already has CREMATION_GROUND) rather than a fourth, overlapping collection here.
 export const VEHICLE_TYPES = ["HEARSE", "AMBULANCE", "VAN", "OTHER"] as const;
 export type VehicleType = (typeof VEHICLE_TYPES)[number];
 
 export const SERVICE_PROVIDER_CATEGORIES = ["PRIEST", "CATERING", "AMBULANCE_SERVICE", "FLORIST", "OTHER"] as const;
 export type ServiceProviderCategory = (typeof SERVICE_PROVIDER_CATEGORIES)[number];
-
-// In-app admin notifications (the Topbar bell) — distinct from NOTIFICATION_* above, which is the
-// outbound email system (notify.service.ts) for donors/families/volunteers. This is the internal
-// "something happened, staff should know" feed: new donation, new enquiry, new request, a
-// volunteer's availability changing.
 export const ADMIN_NOTIFICATION_TYPES = ["DONATION", "ENQUIRY", "CASE", "VOLUNTEER"] as const;
 export type AdminNotificationType = (typeof ADMIN_NOTIFICATION_TYPES)[number];
+export const ORGANISATION_STATUSES = ["ACTIVE", "INACTIVE"] as const;
+export type OrganisationStatus = (typeof ORGANISATION_STATUSES)[number];
+
+export const PROJECT_STATUSES = ["ACTIVE", "INACTIVE", "ARCHIVED"] as const;
+export type ProjectStatus = (typeof PROJECT_STATUSES)[number];

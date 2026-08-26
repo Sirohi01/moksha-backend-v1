@@ -36,3 +36,23 @@ export async function generateVolunteerCode(): Promise<string> {
   const seq = await getNextSequence(`volunteer:${year}`);
   return `MSV-${year}-${String(seq).padStart(6, "0")}`;
 }
+
+/** AGS registration number, e.g. AGS/2026/000045. The legacy Namo Gange system hardcoded the
+ * edition ("15th") directly into this string and derived the sequence by scanning-and-sorting
+ * existing documents rather than an atomic counter — both a yearly maintenance bug and a real
+ * race condition under concurrent submissions. This fixes both: the year is read live, and the
+ * atomic $inc here can never hand out the same number twice, however many requests land at once. */
+/** Arogya delegate code, e.g. AROGYA/2026/000045 — one global atomic sequence per year, same
+ * reasoning as generateAgsRegistrationNo (the legacy system's own numbering had no atomic counter
+ * at all — see migration-tools/arogya-payment-migration-requirements.md). */
+export async function generateArogyaDelegateCode(): Promise<string> {
+  const year = new Date().getFullYear();
+  const seq = await getNextSequence(`arogya-delegate:${year}`);
+  return `AROGYA/${year}/${String(seq).padStart(6, "0")}`;
+}
+
+export async function generateAgsRegistrationNo(): Promise<string> {
+  const year = new Date().getFullYear();
+  const seq = await getNextSequence(`ags-registration:${year}`);
+  return `AGS/${year}/${String(seq).padStart(6, "0")}`;
+}

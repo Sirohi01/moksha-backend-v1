@@ -4,6 +4,7 @@ import { sendSuccess } from "../../utils/ApiResponse";
 import { ApiError } from "../../utils/ApiError";
 import * as authService from "./auth.service";
 import { resolveRoleAndPermissions } from "../../lib/permissions.service";
+import { resolveMyAccess } from "../../lib/accessResolution.service";
 import { listSessions, revokeSessionById, DeviceInfo } from "../../lib/session.service";
 import { IUser } from "../../models/user.model";
 
@@ -93,6 +94,11 @@ export const getMe = asyncHandler(async (req: Request, res: Response) => {
     permissions: Array.from(req.auth.permissions),
     twoFactorPending: req.auth.twoFactorPending,
   });
+});
+export const getMyAccess = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.auth) throw ApiError.unauthorized();
+  const access = await resolveMyAccess(req.auth.userId);
+  sendSuccess(res, 200, "Access resolved", access);
 });
 
 export const getSessions = asyncHandler(async (req: Request, res: Response) => {

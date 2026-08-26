@@ -10,7 +10,7 @@ interface LandingContentModule {
 }
 
 async function loadLandingSections(): Promise<unknown[]> {
-  const adminDefaults = path.resolve(__dirname, "../../../moksha-admin-v1/lib/landingContent.ts");
+  const adminDefaults = path.resolve(__dirname, "../../../moksha-admin/lib/landingContent.ts");
   const module = (await import(pathToFileURL(adminDefaults).href)) as unknown as LandingContentModule;
   return module.defaultLandingSections;
 }

@@ -1,0 +1,13 @@
+import { Router } from "express";
+import { requireAuth } from "../../middlewares/auth.middleware";
+import { authorizeScoped } from "../../middlewares/access.middleware";
+import { validate } from "../../middlewares/validate.middleware";
+import * as controller from "./namoVolunteer.controller";
+import { applyNamoVolunteerSchema, listNamoVolunteersSchema, updateNamoVolunteerSchema } from "./namoVolunteer.validation";
+const router = Router();
+const scoped = (permission: string) => [requireAuth, authorizeScoped({ permission, organisation: "NAMOGANGE" })];
+router.post("/apply", validate(applyNamoVolunteerSchema), controller.apply);
+router.get("/admin", ...scoped("namoVolunteers.read"), validate(listNamoVolunteersSchema), controller.list);
+router.get("/admin/:id", ...scoped("namoVolunteers.read"), controller.get);
+router.put("/admin/:id", ...scoped("namoVolunteers.update"), validate(updateNamoVolunteerSchema), controller.update);
+export default router;

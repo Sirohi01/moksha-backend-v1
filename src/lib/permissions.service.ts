@@ -1,3 +1,4 @@
+import { Types } from "mongoose";
 import { IUser } from "../models/user.model";
 import { Role } from "../models/role.model";
 import { Permission } from "../models/permission.model";
@@ -22,8 +23,17 @@ export function isTwoFactorMandatoryForRole(roleSlug?: string): boolean {
  * an authorization decision itself; every actual request re-resolves via requireAuth. */
 export async function resolveRoleAndPermissions(user: Pick<IUser, "roleId">): Promise<ResolvedPermissions> {
   if (!user.roleId) return { permissions: [] };
+  return resolvePermissionsForRoleId(user.roleId);
+}
 
-  const role = await Role.findById(user.roleId);
+/** Shared by resolveRoleAndPermissions above (the user's single primary role) and
+ * access.middleware.ts's authorizeScoped (an AccessGrant's roleId, which is a different role than
+ * the user's primary one and may vary per organisation/project) — both ultimately need "what can
+ * this role do", just sourced from a different place. */
+export async function resolvePermissionsForRoleId(
+  roleId: Types.ObjectId | string
+): Promise<ResolvedPermissions> {
+  const role = await Role.findById(roleId);
   if (!role || role.status !== "ACTIVE") return { permissions: [] };
   if (role.permissionIds.length === 0) return { roleSlug: role.slug, permissions: [] };
 

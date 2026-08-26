@@ -4,14 +4,16 @@ import { seedPermissions } from "./seedPermissions";
 import { seedAdmin } from "./seedAdmin";
 import { seedNotificationTemplates } from "./seedNotificationTemplates";
 import { seedLandingPage } from "./seedLandingPage";
-
-/** Runs every seed script against a single shared connection — cheaper than each script opening
- * and closing its own, and the only reliably stable option against a local single-node replica
- * set (repeated connect/disconnect cycles were enough to destabilize one in testing). */
+import { seedOrganisations } from "./seedOrganisations";
+import { seedProjects } from "./seedProjects";
+import { seedAccessGrants } from "./seedAccessGrants";
 async function seedAll(): Promise<void> {
   await connectDB();
   await seedPermissions();
+  await seedOrganisations();
+  await seedProjects();
   await seedAdmin();
+  await seedAccessGrants(); // after seedAdmin — needs the super_admin user to already exist
   await seedNotificationTemplates();
   await seedLandingPage();
   await disconnectDB();

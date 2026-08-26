@@ -26,6 +26,7 @@ router.post("/forgot-password", authWriteLimiter, validate(forgotPasswordSchema)
 router.post("/reset-password", authWriteLimiter, validate(resetPasswordSchema), authController.resetPassword);
 
 router.get("/me", requireAuth, authController.getMe);
+router.get("/my-access", requireAuth, authController.getMyAccess);
 router.patch("/change-password", requireAuth, validate(changePasswordSchema), authController.changePassword);
 router.get("/sessions", requireAuth, authController.getSessions);
 router.delete("/sessions/:id", requireAuth, authController.revokeSession);

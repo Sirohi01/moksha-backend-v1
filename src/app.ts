@@ -8,6 +8,7 @@ import { errorMiddleware, notFoundMiddleware } from "./middlewares/error.middlew
 import { requestIdMiddleware } from "./middlewares/requestId.middleware";
 import routes from "./routes";
 import { handleRazorpayWebhook } from "./modules/donation/donation.webhook";
+import { handleArogyaRazorpayWebhook } from "./modules/arogyaDelegateRegistration/arogyaPayment.webhook";
 
 export function createApp(): Application {
   const app = express();
@@ -20,7 +21,7 @@ export function createApp(): Application {
   app.use(helmet());
   app.use(
     cors({
-      origin: [env.CLIENT_URL, env.ADMIN_CLIENT_URL],
+      origin: [env.CLIENT_URL, env.ADMIN_CLIENT_URL, env.NAMOGANGE_CLIENT_URL, env.AROGYA_CLIENT_URL],
       credentials: true,
     })
   );
@@ -41,6 +42,11 @@ export function createApp(): Application {
     `${env.API_PREFIX}/donations/webhook/razorpay`,
     express.raw({ type: "application/json" }),
     handleRazorpayWebhook
+  );
+  app.post(
+    `${env.API_PREFIX}/webhooks/razorpay/arogya`,
+    express.raw({ type: "application/json" }),
+    handleArogyaRazorpayWebhook
   );
 
   app.use(express.json({ limit: "10mb" }));
