@@ -48,6 +48,28 @@ const single = (kind: ArogyaContentKind) => asyncHandler(async (_req: Request, r
   res.json({ success: true, data: await singleton(kind) });
 });
 
+export const chairmanMessage = single("CHAIRMAN_MESSAGE");
+export const founderMessage = single("FOUNDER_MESSAGE");
+export const seoAll = list("SEO");
+export const speakerHero = single("SPEAKER_HERO");
+export const speakerCounters = list("SPEAKER_COUNTER");
+export const expertSpeakersHeading = single("SPEAKER_EXPERT_HEADING");
+export const expertSpeakers = list("SPEAKER_EXPERT");
+
+// These two are the one place the legacy API breaks its own {success,data} envelope convention
+// (backend-arogya/routes/speakers/moreSpeakerRoutes.js returns the raw array/object directly) —
+// reproduced exactly rather than "fixed", since Arogya-frontend's SpeakerCommittees.jsx/
+// ExpertSpeakers.jsx already parse the unwrapped shape (`catRes.length`, `data.find(...)`, not
+// `data.data`).
+export const moreSpeakerCategories = asyncHandler(async (_req: Request, res: Response) => {
+  res.json(await listActive("SPEAKER_MORE_CATEGORY"));
+});
+export const moreSpeakerItems = asyncHandler(async (req: Request, res: Response) => {
+  const { type } = req.query as { type?: string };
+  const items = await listActive("SPEAKER_MORE_ITEM");
+  res.json(type ? items.filter((item) => item.type === type) : items);
+});
+
 export const heroAll = list("HERO");
 export const settingsGet = single("SETTINGS");
 export const glimpseSettings = single("GLIMPSE_SETTINGS");
