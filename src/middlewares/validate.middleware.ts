@@ -17,7 +17,8 @@ export function validate(schema: AnyZodObject) {
       next();
     } catch (err) {
       if (err instanceof ZodError) {
-        next(ApiError.badRequest("Validation failed", err.errors));
+        const details = err.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join("; ");
+        next(ApiError.badRequest(details ? `Validation failed (${details})` : "Validation failed", err.errors));
         return;
       }
       next(err);
