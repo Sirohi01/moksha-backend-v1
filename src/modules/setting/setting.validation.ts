@@ -1,27 +1,27 @@
 import { z } from "zod";
 
 const timeOfDaySchema = z.string().trim().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use 24-hour HH:mm, e.g. 21:00");
-const shortText = z.string().trim().max(80).optional();
-const mediumText = z.string().trim().max(160).optional();
-const longText = z.string().trim().max(700).optional();
-const urlText = z.string().trim().max(500).optional();
-const buttonText = z.string().trim().max(40).optional();
+const shortText = z.string().trim().max(300).optional();
+const mediumText = z.string().trim().max(1000).optional();
+const longText = z.string().trim().max(5000).optional();
+const urlText = z.string().trim().max(2000).optional();
+const buttonText = z.string().trim().max(200).optional();
 
 const landingSectionItemSchema = z.object({
-  title: z.string().trim().max(120).optional(),
-  label: z.string().trim().max(70).optional(),
-  value: z.string().trim().max(50).optional(),
-  description: z.string().trim().max(260).optional(),
+  title: z.string().trim().max(300).optional(),
+  label: z.string().trim().max(300).optional(),
+  value: z.string().trim().max(200).optional(),
+  description: z.string().trim().max(2000).optional(),
   image: urlText,
   href: urlText,
-  features: z.array(z.string().trim().max(80)).optional(),
-});
+  features: z.array(z.string().trim().max(300)).optional(),
+}).passthrough();
 
 const landingHeroSlideSchema = z.object({
-  title: z.string().trim().min(1).max(110),
-  description: z.string().trim().min(1).max(160),
-  image: z.string().trim().min(1).max(500),
-  alt: z.string().trim().min(1).max(180),
+  title: z.string().trim().max(300).optional(),
+  description: z.string().trim().max(1000).optional(),
+  image: urlText,
+  alt: z.string().trim().max(500).optional(),
   buttonLabel: buttonText,
   buttonHref: urlText,
   secondaryButtonLabel: buttonText,
@@ -32,16 +32,16 @@ const landingHeroSlideSchema = z.object({
   supportNowLabel: buttonText,
   supportMissionTitle: shortText,
   supportMissionDescription: mediumText,
-  variant: z.enum(["default", "family-support", "journey-prayer", "volunteer-impact"]).optional(),
-});
+  variant: z.string().optional(),
+}).passthrough();
 
 const landingSectionSchema = z.object({
-  key: z.string().trim().min(1).max(80),
-  name: z.string().trim().min(1).max(80),
+  key: z.string().trim().min(1).max(100),
+  name: z.string().trim().min(1).max(100),
   enabled: z.boolean().optional(),
   eyebrow: shortText,
-  title: z.string().trim().max(120).optional(),
-  subtitle: mediumText,
+  title: longText,
+  subtitle: longText,
   description: longText,
   image: urlText,
   logoImage: urlText,
@@ -49,48 +49,48 @@ const landingSectionSchema = z.object({
   secondaryLogoImage: urlText,
   secondaryImage: urlText,
   quote: longText,
-  legalNotice: z.string().trim().max(200).optional(),
-  lowerTitle: z.string().trim().max(90).optional(),
-  lowerDescription: z.string().trim().max(220).optional(),
-  bottomStatement: z.string().trim().max(240).optional(),
+  legalNotice: longText,
+  lowerTitle: shortText,
+  lowerDescription: longText,
+  bottomStatement: longText,
   secondaryTitle: shortText,
-  secondaryDescription: mediumText,
-  supportTitle: mediumText,
-  supportDescription: mediumText,
+  secondaryDescription: longText,
+  supportTitle: longText,
+  supportDescription: longText,
   regionTitle: shortText,
   regionDescription: shortText,
   phoneLabel: buttonText,
-  phoneNumber: z.string().trim().max(24).optional(),
-  contactEmail: z.string().trim().max(100).optional(),
-  contactAddress: mediumText,
+  phoneNumber: z.string().trim().max(50).optional(),
+  contactEmail: z.string().trim().max(200).optional(),
+  contactAddress: longText,
   availabilityText: mediumText,
-  actionTitle: z.string().trim().max(90).optional(),
-  requestTitle: z.string().trim().max(90).optional(),
-  requestDescription: z.string().trim().max(180).optional(),
-  inputPlaceholder: z.string().trim().max(70).optional(),
+  actionTitle: shortText,
+  requestTitle: shortText,
+  requestDescription: longText,
+  inputPlaceholder: shortText,
   submitLabel: buttonText,
   submittedLabel: buttonText,
-  successMessage: z.string().trim().max(180).optional(),
-  initiativeLabel: z.string().trim().max(90).optional(),
-  quickLinksTitle: z.string().trim().max(50).optional(),
-  servicesTitle: z.string().trim().max(50).optional(),
-  initiativesTitle: z.string().trim().max(50).optional(),
-  contactTitle: z.string().trim().max(50).optional(),
+  successMessage: longText,
+  initiativeLabel: shortText,
+  quickLinksTitle: shortText,
+  servicesTitle: shortText,
+  initiativesTitle: shortText,
+  contactTitle: shortText,
   buttonLabel: buttonText,
   buttonHref: urlText,
   secondaryButtonLabel: buttonText,
   secondaryButtonHref: urlText,
   tertiaryButtonLabel: buttonText,
   tertiaryButtonHref: urlText,
-  sloganTitle: z.string().trim().max(90).optional(),
+  sloganTitle: shortText,
   immediateHelpTitle: shortText,
-  immediateHelpDescription: mediumText,
+  immediateHelpDescription: longText,
   supportNowLabel: buttonText,
   supportMissionTitle: shortText,
-  supportMissionDescription: mediumText,
+  supportMissionDescription: longText,
   slides: z.array(landingHeroSlideSchema).optional(),
   items: z.array(landingSectionItemSchema).optional(),
-});
+}).passthrough();
 
 export const updateSettingSchema = z.object({
   body: z.object({
@@ -135,5 +135,15 @@ export const updateSettingSchema = z.object({
         sections: z.array(landingSectionSchema).optional(),
       })
       .optional(),
-  }),
+    aboutPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),
+    servicesPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),
+    unclaimedBodyPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),
+    volunteerPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),
+    partnershipPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),
+    csrPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),
+    requestHelpPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),
+    donationPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),
+    contactPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),
+    trackPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),
+  }).passthrough(),
 });
