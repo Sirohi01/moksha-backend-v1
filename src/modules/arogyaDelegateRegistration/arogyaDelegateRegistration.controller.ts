@@ -30,11 +30,11 @@ export const getAdminOne = asyncHandler(async (req: Request, res: Response) =>
 );
 
 export const initiate = asyncHandler(async (req: Request, res: Response) => {
-  const { channel, email, whatsappNumber, mobile } = req.body as {
-    channel: "email" | "whatsapp"; email?: string; whatsappNumber?: string; mobile?: string;
+  const { channel, email, whatsappNumber, mobile, fullName } = req.body as {
+    channel: "email" | "whatsapp"; email?: string; whatsappNumber?: string; mobile?: string; fullName: string;
   };
   const destination = channel === "email" ? email! : (whatsappNumber ?? mobile)!;
-  await registrationService.initiate(await orgId(), channel, destination);
+  await registrationService.initiate(await orgId(), channel, destination, fullName);
   sendSuccess(res, 200, `OTP sent successfully to ${channel}.`, null);
 });
 

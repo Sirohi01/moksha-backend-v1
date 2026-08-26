@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { Types } from "mongoose";
 import { generateArogyaDelegateCode } from "../../lib/counter.service";
-import { sendArogyaEmail } from "../../lib/arogyaNotify.service";
+import { sendArogyaAdminLeadEmail, sendArogyaGroupThankYouEmail, sendArogyaThankYouEmail } from "../../lib/arogyaNotify.service";
 import { maybeDecrypt } from "../../lib/crypto";
 import { writeAuditLog } from "../../lib/audit.service";
 import { ArogyaDelegateRegistration, IArogyaDelegateRegistration } from "../../models/arogyaDelegateRegistration.model";
@@ -47,20 +47,20 @@ interface DelegateFormFields {
   isSpeaker?: boolean; dietary?: string; assistance?: string; documentUrl?: string;
 }
 
-export async function initiate(organisationId: string, channel: "email" | "whatsapp", destination: string) {
-  await otpService.sendOtp(organisationId, channel, destination);
+export async function initiate(organisationId: string, channel: "email" | "whatsapp", destination: string, fullName: string) {
+  await otpService.sendOtp(organisationId, channel, destination, fullName);
 }
 
 export async function verifyOtpStep(organisationId: string, channel: "email" | "whatsapp", destination: string, otp: string) {
   await otpService.verifyOtp(organisationId, channel, destination, otp);
 }
 
-async function sendConfirmation(email: string, fullName: string, delegateCode: string) {
-  await sendArogyaEmail(
-    email,
-    "Arogya Sangosthi — Registration Confirmed",
-    `<p>Dear ${fullName},</p><p>Your registration is confirmed. Your delegate code is <strong>${delegateCode}</strong>.</p>`
-  ).catch(() => {}); // confirmation email failure must never undo an already-successful, already-paid registration
+/** "Online (Razorpay)" for a real gateway payment; the human-readable offline mode otherwise —
+ * shown in both the delegate's own confirmation email and the admin lead-notification email. */
+function paymentModeLabel(payment: IArogyaPayment): string {
+  if (payment.gateway === "RAZORPAY") return "Online (Razorpay)";
+  const labels: Record<string, string> = { CASH: "Cash", CHEQUE: "Cheque", PAYTM: "Paytm", NEFT_RTGS: "NEFT/RTGS", OTHER: "Other" };
+  return labels[payment.paymentMode ?? "OTHER"] ?? "Offline";
 }
 
 /** Shared by the public OTP-verified flow and the admin offline-recording flow — the only
@@ -90,7 +90,19 @@ async function buildSingleRegistration(organisationId: string, payment: IArogyaP
   await payment.save();
   if (payment.couponId) await couponService.markCouponUsed(payment.couponId.toString(), form.email);
 
-  await sendConfirmation(form.email, form.fullName, delegateCode);
+  const paymentMode = paymentModeLabel(payment);
+  const amountRupees = payment.amountPaise / 100;
+  // Confirmation-email failure must never undo an already-successful, already-paid registration.
+  await sendArogyaThankYouEmail({
+    delegateId: delegateCode, fullName: form.fullName, email: form.email, mobile: form.mobile,
+    designation: form.designation, organization: form.organization, passName: pass.name,
+    amountRupees, selectedDays: payment.selectedDays, paymentMode,
+  }).catch(() => {});
+  await sendArogyaAdminLeadEmail({
+    delegateId: delegateCode, fullName: form.fullName, email: form.email, mobile: form.mobile,
+    designation: form.designation, organization: form.organization, passName: pass.name,
+    amountRupees, selectedDays: payment.selectedDays, paymentMode, isGroup: false,
+  }).catch(() => {});
   return registration;
 }
 
@@ -145,7 +157,18 @@ async function buildGroupRegistrations(
   await payment.save();
   if (payment.couponId) await couponService.markCouponUsed(payment.couponId.toString(), primary.email);
 
-  await sendConfirmation(primary.email, primary.fullName, primaryCode);
+  const paymentMode = paymentModeLabel(payment);
+  const amountRupees = payment.amountPaise / 100;
+  const memberSummaries = members.map((m) => ({ fullName: m.fullName, email: m.email, mobile: m.mobile, designation: m.designation }));
+  await sendArogyaGroupThankYouEmail({
+    groupId, primaryContactName: primary.fullName, organization: primary.organization, passName: pass.name,
+    amountRupees, selectedDays: payment.selectedDays, members: memberSummaries, primaryEmail: primary.email,
+  }).catch(() => {});
+  await sendArogyaAdminLeadEmail({
+    delegateId: groupId, fullName: primary.fullName, email: primary.email, mobile: primary.mobile,
+    designation: primary.designation, organization: primary.organization, passName: pass.name,
+    amountRupees, selectedDays: payment.selectedDays, paymentMode, isGroup: true, members: memberSummaries,
+  }).catch(() => {});
   return registrations;
 }
 

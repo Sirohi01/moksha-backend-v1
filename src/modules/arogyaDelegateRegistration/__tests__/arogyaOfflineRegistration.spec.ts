@@ -5,6 +5,7 @@ import { ArogyaCoupon } from "../../../models/arogyaCoupon.model";
 import { ArogyaPayment } from "../../../models/arogyaPayment.model";
 import { ArogyaDelegateRegistration } from "../../../models/arogyaDelegateRegistration.model";
 import { adminCreateOfflineGroup, adminCreateOfflineSingle } from "../arogyaDelegateRegistration.service";
+import * as arogyaNotify from "../../../lib/arogyaNotify.service";
 
 describe("Arogya admin offline registration — cash/cheque delegates recorded without Razorpay", () => {
   let server: MongoMemoryServer;
@@ -15,11 +16,19 @@ describe("Arogya admin offline registration — cash/cheque delegates recorded w
     server = await MongoMemoryServer.create();
     await mongoose.connect(server.getUri());
   });
+  beforeEach(() => {
+    // Real network SMTP sends have no place in a unit test — these are covered by the confirmed
+    // template content itself, not by whether nodemailer can actually reach a mail server here.
+    jest.spyOn(arogyaNotify, "sendArogyaThankYouEmail").mockResolvedValue(undefined);
+    jest.spyOn(arogyaNotify, "sendArogyaGroupThankYouEmail").mockResolvedValue(undefined);
+    jest.spyOn(arogyaNotify, "sendArogyaAdminLeadEmail").mockResolvedValue(undefined);
+  });
   afterEach(async () => {
     await ArogyaPass.deleteMany({});
     await ArogyaCoupon.deleteMany({});
     await ArogyaPayment.deleteMany({});
     await ArogyaDelegateRegistration.deleteMany({});
+    jest.restoreAllMocks();
   });
   afterAll(async () => { await mongoose.disconnect(); await server.stop(); });
 
