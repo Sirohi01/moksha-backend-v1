@@ -135,10 +135,15 @@ export const updateSettingSchema = z.object({
         sections: z.array(landingSectionSchema).optional(),
       })
       .optional(),
-    aboutPage: z
-      .object({
-        sections: z.array(landingSectionSchema).optional(),
-      })
-      .optional(),
+    aboutPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),
+    servicesPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),
+    unclaimedBodyPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),
+    volunteerPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),
+    partnershipPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),
+    csrPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),
+    requestHelpPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),
+    donationPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),
+    contactPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),
+    trackPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),
   }).passthrough(),
 });

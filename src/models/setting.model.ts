@@ -104,6 +104,15 @@ export interface ISetting extends Document {
     }[];
   };
   aboutPage?: ISetting["landingPage"];
+  servicesPage?: ISetting["landingPage"];
+  unclaimedBodyPage?: ISetting["landingPage"];
+  volunteerPage?: ISetting["landingPage"];
+  partnershipPage?: ISetting["landingPage"];
+  csrPage?: ISetting["landingPage"];
+  requestHelpPage?: ISetting["landingPage"];
+  donationPage?: ISetting["landingPage"];
+  contactPage?: ISetting["landingPage"];
+  trackPage?: ISetting["landingPage"];
   updatedAt: Date;
 }
 
@@ -326,7 +335,7 @@ const settingSchema = new Schema<ISetting>(
       },
     },
   },
-  { timestamps: true }
+  { timestamps: true, strict: false }
 );
 
 export const Setting = model<ISetting>("Setting", settingSchema);
