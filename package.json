@@ -35,6 +35,7 @@
     "migrate:import:namo-volunteers": "tsx migration-tools/namogange-volunteers-import.ts",
     "migrate:import:namo-leads": "tsx migration-tools/namogange-leads-import.ts",
     "migrate:import:namo-remaining": "tsx migration-tools/namogange-remaining-import.ts",
+    "migrate:all": "tsx migration-tools/migrate-all.ts",
     "test": "jest"
   },
   "dependencies": {
