@@ -11,7 +11,13 @@ export async function getSettings(): Promise<ISetting> {
 
 export async function updateSettings(data: Partial<ISetting>): Promise<ISetting> {
   const settings = await getSettings();
-  Object.assign(settings, data);
+  
+  for (const key of Object.keys(data) as Array<keyof ISetting>) {
+    // @ts-expect-error Typescript doesn't know all the dynamic keys on ISetting
+    settings[key] = data[key];
+    settings.markModified(key as string);
+  }
+  
   await settings.save();
   return settings;
 }

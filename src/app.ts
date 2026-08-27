@@ -26,14 +26,16 @@ export function createApp(): Application {
     })
   );
   app.use(morgan(isProd ? "combined" : "dev"));
-  app.use(
-    rateLimit({
-      windowMs: 15 * 60 * 1000,
-      max: 300,
-      standardHeaders: true,
-      legacyHeaders: false,
-    })
-  );
+  if (isProd) {
+    app.use(
+      rateLimit({
+        windowMs: 15 * 60 * 1000,
+        max: 300,
+        standardHeaders: true,
+        legacyHeaders: false,
+      })
+    );
+  }
 
   // Mounted BEFORE express.json() and given its own raw-body parser: signature verification needs
   // the exact bytes Razorpay signed, which express.json() would otherwise have already consumed
