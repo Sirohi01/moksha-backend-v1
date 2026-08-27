@@ -37,7 +37,7 @@ async function run() {
             { organisationId: organisation._id, kind: transformed.kind, legacyId: transformed.legacyId },
             { ...transformed, organisationId: organisation._id },
             { upsert: true, new: true, rawResult: true }
-          );
+          ) as unknown as { lastErrorObject?: { updatedExisting?: boolean } };
           if (result.lastErrorObject?.updatedExisting) updated++;
           else created++;
         } catch (error) {

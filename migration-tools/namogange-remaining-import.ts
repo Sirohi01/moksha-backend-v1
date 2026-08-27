@@ -8,18 +8,7 @@ import { NamoAgsCollege } from "../src/models/namoAgsCollege.model";
 import { NamoAgsClientStatusLog } from "../src/models/namoAgsClientStatusLog.model";
 import { NamoAgsDelegate } from "../src/models/namoAgsDelegate.model";
 
-/**
- * Imports everything explicitly requested as "don't skip anything" on 2026-08-27: the ~15 small
- * admin lookup/master tables (as NamoLookup), agsevents (as a NamoContent AGS_EVENT), colleges
- * (as NamoAgsCollege), and clientstatuses (as NamoAgsClientStatusLog, best-effort linked to
- * NamoAgsDelegate — see that model's own comment on the real legacy dangling "Client" ref).
- * Deliberately NOT migrated (see UNIFIED_PLATFORM_STATE.md): users/admins/roles/rolerights
- * (legacy staff auth — Moksha's own RBAC replaces this; importing old bcrypt hashes into a
- * different hashing scheme would be actively insecure, not just redundant), activitylogs/sidebars
- * (legacy-admin-UI-only artifacts with no equivalent concept in the new system), otps (empty,
- * superseded by NamoOtp).
- */
-
+type RawUpdateResult = { lastErrorObject?: { updatedExisting?: boolean } };
 interface LookupMapping { collection: string; type: NamoLookupType; nameField: string }
 const LOOKUP_MAPPINGS: LookupMapping[] = [
   { collection: "categories", type: "CATEGORY", nameField: "name" },
@@ -66,7 +55,7 @@ async function run() {
             { organisationId, type: mapping.type, legacyId },
             payload,
             { upsert: true, new: true, rawResult: true, runValidators: true }
-          );
+          ) as unknown as RawUpdateResult;
           if (result.lastErrorObject?.updatedExisting) updated++; else created++;
         } catch (error) {
           skipped++;
@@ -89,7 +78,7 @@ async function run() {
             { organisationId, kind: "AGS_EVENT", legacyId },
             payload,
             { upsert: true, new: true, rawResult: true, runValidators: true }
-          );
+          ) as unknown as RawUpdateResult;
           if (result.lastErrorObject?.updatedExisting) updated++; else created++;
         } catch (error) {
           skipped++;
@@ -118,7 +107,7 @@ async function run() {
             { organisationId, legacyId },
             payload,
             { upsert: true, new: true, rawResult: true, runValidators: true }
-          );
+          ) as unknown as RawUpdateResult;
           if (result.lastErrorObject?.updatedExisting) updated++; else created++;
         } catch (error) {
           skipped++;
@@ -148,7 +137,7 @@ async function run() {
             { organisationId, legacyId },
             payload,
             { upsert: true, new: true, rawResult: true, runValidators: true }
-          );
+          ) as unknown as RawUpdateResult;
           if (result.lastErrorObject?.updatedExisting) updated++; else created++;
         } catch (error) {
           skipped++;

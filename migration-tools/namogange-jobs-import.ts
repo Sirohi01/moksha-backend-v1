@@ -64,7 +64,7 @@ async function run() {
           { organisationId: organisation._id, legacyId },
           payload,
           { upsert: true, new: true, rawResult: true, runValidators: true }
-        );
+        ) as unknown as { lastErrorObject?: { updatedExisting?: boolean } };
         if (result.lastErrorObject?.updatedExisting) updated++; else created++;
       } catch (error) {
         skipped++;
