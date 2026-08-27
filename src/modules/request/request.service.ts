@@ -108,6 +108,7 @@ export async function createRequest(input: CreateRequestInput) {
     );
   }
   await notifyAdmins(
+    "MOKSHA",
     "CASE",
     `New assistance request — ${requestNo}`,
     `${input.requester.name} · ${input.location.city}`,

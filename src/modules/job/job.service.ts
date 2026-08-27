@@ -11,6 +11,8 @@ export interface JobInput {
   summary: string;
   description: string;
   requirements?: string[];
+  experienceText?: string;
+  salaryText?: string;
   applicationUrl?: string;
   applicationEmail?: string;
   status?: JobStatus;

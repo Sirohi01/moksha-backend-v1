@@ -108,6 +108,17 @@ const PERMISSIONS: PermissionSeed[] = [
 
   { module: "arogyaDelegates", action: "read", label: "View Arogya delegate registrations" },
   { module: "arogyaDelegates", action: "create", label: "Record offline/cash Arogya delegate registrations" },
+
+  { module: "namoJobApplications", action: "read", label: "View Namo Gange career-page applications" },
+  { module: "namoJobApplications", action: "update", label: "Update Namo Gange career-page application status" },
+  { module: "namoEnquiries", action: "read", label: "View Namo Gange contact-form enquiries" },
+  { module: "namoSupportRequests", action: "read", label: "View Namo Gange support requests" },
+  { module: "namoDonationLeads", action: "read", label: "View Namo Gange donation pledges" },
+  { module: "namoClickAnalytics", action: "read", label: "View Namo Gange social-icon click stats" },
+  { module: "namoLookups", action: "read", label: "View Namo Gange lookup/master data" },
+  { module: "namoLookups", action: "update", label: "Manage Namo Gange lookup/master data" },
+  { module: "namoAgsColleges", action: "read", label: "View AGS institution directory" },
+  { module: "namoAgsColleges", action: "update", label: "Manage AGS institution directory" },
 ];
 
 const ALL_KEYS = PERMISSIONS.map((p) => `${p.module}.${p.action}`);
@@ -151,6 +162,9 @@ const ROLE_SEEDS: {
         "agsDelegates.read", "agsDelegates.create", "agsDelegates.update", "agsDelegates.delete",
         "agsPayments.read", "agsPayments.create", "agsPayments.update",
         "arogyaDelegates.read", "arogyaDelegates.create",
+        "namoJobApplications.read", "namoJobApplications.update",
+        "namoEnquiries.read", "namoSupportRequests.read", "namoDonationLeads.read", "namoClickAnalytics.read",
+        "namoLookups.read", "namoLookups.update", "namoAgsColleges.read", "namoAgsColleges.update",
       ],
     },
     {
@@ -215,10 +229,6 @@ const ROLE_SEEDS: {
       keys: ["donations.read"],
     },
   ];
-
-/** Exported so seedAll.ts (and tests) can run this against an already-open connection instead of
- * each seed script opening and closing its own — cheap in production against a real replica set,
- * but repeated connect/disconnect cycles are enough to destabilize a local single-node test one. */
 export async function seedPermissions(): Promise<void> {
   const keyToId = new Map<string, string>();
 

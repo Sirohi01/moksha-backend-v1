@@ -59,6 +59,7 @@ const envSchema = z.object({
   NAMOGANGE_MSG91_SENDER_ID: z.string().optional(),
   NAMOGANGE_AISENSY_API_KEY: z.string().optional(),
   NAMOGANGE_AISENSY_CAMPAIGN_OTP: z.string().optional(),
+  NAMOGANGE_OPUS_API_KEY: z.string().optional(),
   AROGYA_MSG91_AUTH_KEY: z.string().optional(),
   AROGYA_MSG91_TEMPLATE_ID: z.string().optional(),
   AROGYA_MSG91_SENDER_ID: z.string().optional(),

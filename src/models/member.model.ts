@@ -17,6 +17,9 @@ export interface IMember extends Document {
   qualification?: string;
   occupation?: string;
   organisationType?: string;
+  organizationName?: string;
+  website?: string;
+  district?: string;
   designation?: string;
   dob?: Date;
   mobile: string;
@@ -60,6 +63,9 @@ const memberSchema = new Schema<IMember>({
   qualification: { type: String, trim: true },
   occupation: { type: String, trim: true },
   organisationType: { type: String, trim: true },
+  organizationName: { type: String, trim: true },
+  website: { type: String, trim: true },
+  district: { type: String, trim: true },
   designation: { type: String, trim: true },
   dob: Date,
   mobile: { type: String, required: true },

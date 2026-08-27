@@ -259,7 +259,10 @@ export type VehicleType = (typeof VEHICLE_TYPES)[number];
 
 export const SERVICE_PROVIDER_CATEGORIES = ["PRIEST", "CATERING", "AMBULANCE_SERVICE", "FLORIST", "OTHER"] as const;
 export type ServiceProviderCategory = (typeof SERVICE_PROVIDER_CATEGORIES)[number];
-export const ADMIN_NOTIFICATION_TYPES = ["DONATION", "ENQUIRY", "CASE", "VOLUNTEER"] as const;
+export const ADMIN_NOTIFICATION_TYPES = [
+  "DONATION", "ENQUIRY", "CASE", "VOLUNTEER",
+  "DELEGATE", "MEMBER", "JOB_APPLICATION", "SUPPORT",
+] as const;
 export type AdminNotificationType = (typeof ADMIN_NOTIFICATION_TYPES)[number];
 export const ORGANISATION_STATUSES = ["ACTIVE", "INACTIVE"] as const;
 export type OrganisationStatus = (typeof ORGANISATION_STATUSES)[number];

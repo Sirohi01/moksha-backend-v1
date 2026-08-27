@@ -10,6 +10,8 @@ const body = z.object({
   summary: z.string().trim().min(10).max(500),
   description: z.string().trim().min(20),
   requirements: z.array(z.string().trim().min(1).max(300)).max(50).default([]),
+  experienceText: z.string().trim().max(80).optional().or(z.literal("")),
+  salaryText: z.string().trim().max(80).optional().or(z.literal("")),
   applicationUrl: z.string().trim().url().optional().or(z.literal("")),
   applicationEmail: z.string().trim().email().optional().or(z.literal("")),
   status: z.enum(JOB_STATUSES).default("DRAFT"),

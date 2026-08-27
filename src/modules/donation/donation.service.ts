@@ -243,6 +243,7 @@ async function confirmPaymentTransaction(
     );
   }
   await notifyAdmins(
+    "MOKSHA",
     "DONATION",
     `New donation — ₹${toRupees(donation.amount).toLocaleString("en-IN")}`,
     `From ${donor.name}`,
@@ -270,9 +271,6 @@ async function confirmPaymentTransaction(
 
   return donation;
 }
-
-/** Mirrors confirmPaymentTransaction's idempotency for the failure path — never downgrades a
- * donation that some other event (e.g. a webhook that arrived first) already confirmed SUCCESS. */
 async function markPaymentTransactionFailed(
   transaction: IPaymentTransaction,
   donation: IDonation
@@ -292,9 +290,6 @@ export async function verifyDonation(input: VerifyDonationInput) {
 
   const transaction = await PaymentTransaction.findOne({ donationId: donation._id }).sort({ createdAt: -1 });
   if (!transaction) throw ApiError.notFound("No payment transaction found for this donation");
-
-  // Order-based (one-time) and subscription-based (recurring) checkouts sign a different string —
-  // Razorpay's own documented convention, not a choice made here.
   const expectedSignature = input.orderId
     ? crypto.createHmac("sha256", env.RAZORPAY_KEY_SECRET).update(`${input.orderId}|${input.paymentId}`).digest("hex")
     : crypto.createHmac("sha256", env.RAZORPAY_KEY_SECRET).update(`${input.paymentId}|${input.subscriptionId}`).digest("hex");
@@ -311,13 +306,13 @@ export async function verifyDonation(input: VerifyDonationInput) {
 
   return serializeDonationForDonor(donation, donor);
 }
-
 /**
  * Webhook path for a one-time (order-based) payment.captured/payment.failed event — looks up the
  * PaymentTransaction this app created at checkout time by Razorpay's order_id. This is the
  * authoritative confirmation: it fires even if the donor's browser never returns from checkout to
  * call /donations/verify (closed tab, network drop, etc.).
  */
+
 export async function confirmOneTimePaymentByOrderId(
   orderId: string,
   paymentId: string
@@ -702,18 +697,16 @@ export async function renderReceiptHtml(receipt: IReceipt): Promise<string> {
   <div class="row"><span class="label">Donor Name</span><span class="value">${donor?.name ?? "—"}</span></div>
   <div class="row"><span class="label">PAN</span><span class="value">${panDisplay}</span></div>
   <div class="amount">₹${toRupees(receipt.amount).toLocaleString("en-IN")}</div>
-  ${
-    receipt.is80GEligible && org?.exemptionRef
+  ${receipt.is80GEligible && org?.exemptionRef
       ? `<div class="row"><span class="label">80G Exemption Ref.</span><span class="value">${org.exemptionRef}</span></div>`
       : ""
-  }
+    }
   ${org?.panNumber ? `<div class="row"><span class="label">Org PAN</span><span class="value">${org.panNumber}</span></div>` : ""}
   ${org?.registeredAddress ? `<div class="row"><span class="label">Registered Address</span><span class="value">${org.registeredAddress}</span></div>` : ""}
-  <p class="footer">${
-    receipt.is80GEligible
+  <p class="footer">${receipt.is80GEligible
       ? "This receipt is eligible for tax deduction under Section 80G of the Income Tax Act, 1961. Thank you for supporting Moksha Sewa."
       : "Thank you for supporting Moksha Sewa."
-  }</p>
+    }</p>
 </body>
 </html>`;
 }

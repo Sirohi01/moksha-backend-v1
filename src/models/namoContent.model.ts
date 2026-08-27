@@ -4,6 +4,15 @@ export const NAMO_CONTENT_KINDS = [
   "BLOG", "FAQ", "TESTIMONIAL", "BANNER", "GALLERY_IMAGE", "GALLERY_VIDEO",
   "ABOUT", "ACHIEVEMENT", "INITIATIVE", "OBJECTIVE", "RECENT_UPDATE", "TRUST_BODY",
   "SEO", "SOCIAL_MEDIA",
+  "HERO", "NEWSLETTER", "CATEGORY_IMAGE", "PUBLISHED", "SEO_CODE",
+  // Events (Backend_Namo_Gange models/add_by_admin/eventModel.js, collection "events") fits the
+  // same generic image+title+status shape as Hero/Banner/TrustBody, so it's a NamoContent kind
+  // rather than its own dedicated model+Cloudinary-upload module.
+  "EVENT",
+  // AGS's own event/seminar-edition announcements (Backend_Namo_Gange models/add_by_admin/
+  // AGSEventModel.js, collection "agsevents") — same generic image+title+status shape as EVENT,
+  // kept as a separate kind since it's AGS-specific content, not general Namo Gange content.
+  "AGS_EVENT",
 ] as const;
 export type NamoContentKind = (typeof NAMO_CONTENT_KINDS)[number];
 export const NAMO_CONTENT_STATUSES = ["ACTIVE", "INACTIVE"] as const;

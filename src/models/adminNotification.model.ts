@@ -1,14 +1,8 @@
 import { Schema, model, Document, Types } from "mongoose";
 import { AdminNotificationType, ADMIN_NOTIFICATION_TYPES } from "../utils/constants";
-
-/**
- * The Topbar bell's in-app feed for internal staff — a shared inbox (one read-state for the whole
- * team, not per-admin) rather than a per-user notification system. For an org this size that's a
- * deliberate simplification: nobody needs their own separate unread count, and per-user tracking
- * would need a join table for no real benefit yet.
- */
 export interface IAdminNotification extends Document {
   _id: Types.ObjectId;
+  organisationCode: string;
   type: AdminNotificationType;
   title: string;
   message: string;
@@ -19,6 +13,7 @@ export interface IAdminNotification extends Document {
 
 const adminNotificationSchema = new Schema<IAdminNotification>(
   {
+    organisationCode: { type: String, required: true, index: true, uppercase: true, trim: true },
     type: { type: String, enum: ADMIN_NOTIFICATION_TYPES, required: true, index: true },
     title: { type: String, required: true, trim: true },
     message: { type: String, required: true, trim: true },
@@ -27,5 +22,6 @@ const adminNotificationSchema = new Schema<IAdminNotification>(
   },
   { timestamps: { createdAt: true, updatedAt: false } }
 );
+adminNotificationSchema.index({ organisationCode: 1, isRead: 1, createdAt: -1 });
 
 export const AdminNotification = model<IAdminNotification>("AdminNotification", adminNotificationSchema);

@@ -30,7 +30,7 @@ export const createEnquiry = asyncHandler(async (req: Request, res: Response) =>
       { waitForDelivery: true }
     );
   }
-  await notifyAdmins("ENQUIRY", `New enquiry from ${req.body.name}`, req.body.message, "/enquiries");
+  await notifyAdmins("MOKSHA", "ENQUIRY", `New enquiry from ${req.body.name}`, req.body.message, "/enquiries");
   sendAdminFormSubmissionEmail({
     formName: "Contact Enquiry",
     userName: req.body.name,
@@ -75,7 +75,7 @@ async function createWebsiteEnquiry(req: Request, category: IEnquiry["category"]
     partnership: "Partnership enquiry",
     unclaimed_body: "Unclaimed-body Sewa request",
   };
-  await notifyAdmins("ENQUIRY", `${labels[category]} from ${req.body.name}`, req.body.message, "/enquiries");
+  await notifyAdmins("MOKSHA", "ENQUIRY", `${labels[category]} from ${req.body.name}`, req.body.message, "/enquiries");
   sendAdminFormSubmissionEmail({
     formName: labels[category],
     userName: req.body.name,

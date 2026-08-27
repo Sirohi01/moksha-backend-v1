@@ -514,9 +514,6 @@ export async function getMyProfile(userId: string) {
     name: user?.name,
     phone: user?.phone,
     email: user?.email,
-    // Volunteer registration stores the uploaded profile photograph on the volunteer record.
-    // Prefer a user-level avatar when one exists, otherwise expose that uploaded photograph to
-    // the self-service dashboard under its stable `avatarUrl` contract.
     avatarUrl: user?.avatarUrl || obj.photographUrl,
   };
 }
@@ -530,6 +527,7 @@ export async function updateMyAvailability(userId: string, availability: Volunte
   if (changed) {
     const user = await User.findById(userId).select("name");
     await notifyAdmins(
+      "MOKSHA",
       "VOLUNTEER",
       `${user?.name ?? "A volunteer"} is now ${availability.charAt(0) + availability.slice(1).toLowerCase()}`,
       `${volunteer.city}`,

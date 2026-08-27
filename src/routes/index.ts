@@ -39,6 +39,16 @@ import arogyaPassRoutes from "../modules/arogyaPass/arogyaPass.routes";
 import arogyaCouponRoutes from "../modules/arogyaCoupon/arogyaCoupon.routes";
 import arogyaDelegateRegistrationRoutes from "../modules/arogyaDelegateRegistration/arogyaDelegateRegistration.routes";
 import arogyaPaymentRoutes from "../modules/arogyaDelegateRegistration/arogyaPayment.routes";
+import namoPublicCompatRoutes from "../modules/namoPublicCompat/namoPublicCompat.routes";
+import namoOtpRoutes from "../modules/namoOtp/namoOtp.routes";
+import namoJobApplicationRoutes from "../modules/namoJobApplication/namoJobApplication.routes";
+import namoLegacyWriteRoutes from "../modules/namoLegacyWrite/namoLegacyWrite.routes";
+import namoEnquiryRoutes from "../modules/namoEnquiry/namoEnquiry.routes";
+import namoSupportRequestRoutes from "../modules/namoSupportRequest/namoSupportRequest.routes";
+import namoDonationLeadRoutes from "../modules/namoDonationLead/namoDonationLead.routes";
+import namoClickAnalyticsRoutes from "../modules/namoClickAnalytics/namoClickAnalytics.routes";
+import namoLookupRoutes from "../modules/namoLookup/namoLookup.routes";
+import namoAgsCollegeRoutes from "../modules/namoAgsCollege/namoAgsCollege.routes";
 
 const router = Router();
 
@@ -75,28 +85,31 @@ router.use("/namo-volunteers", namoVolunteerRoutes);
 router.use("/ags-delegates", namoAgsDelegateRoutes);
 router.use("/ags-payments", namoAgsPaymentRoutes);
 router.use("/arogya-content", arogyaContentRoutes);
-// Arogya-frontend's own api.js appends "/api" to whatever base URL it's given unless the base
-// already ends with that literal segment (a quirk in that repo, not something we control) — the
-// trailing /api here exists ONLY to satisfy that, matching VITE_API_URL=.../legacy/arogya with
-// zero changes needed in Arogya-frontend's own code. See UNIFIED_PLATFORM_STATE.md §D/§E.
 router.use("/legacy/arogya/api", arogyaPublicCompatRoutes);
-// Bare reference-data lookups — no admin CRUD by design (see crmLocation.routes.ts), so this is
-// their only mount point.
 router.use("/legacy/arogya/api", crmLocationRoutes);
-
-// Clean admin-facing mounts (moksha-admin's future Arogya delegates/passes/coupons screens).
 router.use("/arogya-categories", arogyaCategoryRoutes);
 router.use("/arogya-passes", arogyaPassRoutes);
 router.use("/arogya-coupons", arogyaCouponRoutes);
-// Same routers, mounted again under the legacy-compat prefix so Arogya-frontend's real
-// `/categories?type=` and `/coupons/validate` calls resolve without any change on its side.
 router.use("/legacy/arogya/api/categories", arogyaCategoryRoutes);
 router.use("/legacy/arogya/api/coupons", arogyaCouponRoutes);
 router.use("/legacy/arogya/api/delegates-registration", arogyaDelegateRegistrationRoutes);
 router.use("/legacy/arogya/api/payment", arogyaPaymentRoutes);
-// Clean admin-facing mount for moksha-admin's delegate registrations viewer (the /admin/* routes
-// only — the public initiate/verify/verify-group routes are also reachable here, harmlessly, but
-// the frontend only ever calls the legacy-prefixed mount above).
 router.use("/arogya-delegates", arogyaDelegateRegistrationRoutes);
+router.use("/legacy/namogange", namoPublicCompatRoutes);
+router.use("/legacy/namogange/otp", namoOtpRoutes);
+router.use("/legacy/namogange/job-apply", namoJobApplicationRoutes);
+router.use("/legacy/namogange", namoLegacyWriteRoutes);
+router.use("/namo-job-applications", namoJobApplicationRoutes);
+router.use("/legacy/namogange/enquire-list", namoEnquiryRoutes);
+router.use("/legacy/namogange/support", namoSupportRequestRoutes);
+router.use("/legacy/namogange/donations", namoDonationLeadRoutes);
+router.use("/legacy/namogange/click-analytics", namoClickAnalyticsRoutes);
+// Clean admin-facing mounts for staff to view these public submissions.
+router.use("/namo-enquiries", namoEnquiryRoutes);
+router.use("/namo-support-requests", namoSupportRequestRoutes);
+router.use("/namo-donation-leads", namoDonationLeadRoutes);
+router.use("/namo-click-analytics", namoClickAnalyticsRoutes);
+router.use("/namo-lookups", namoLookupRoutes);
+router.use("/namo-ags-colleges", namoAgsCollegeRoutes);
 
 export default router;

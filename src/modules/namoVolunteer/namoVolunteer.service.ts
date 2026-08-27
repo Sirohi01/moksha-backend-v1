@@ -2,6 +2,7 @@ import { Types } from "mongoose";
 import { decryptField, maybeDecrypt } from "../../lib/crypto";
 import { INamoVolunteer, NamoVolunteer, NamoVolunteerStatus } from "../../models/namoVolunteer.model";
 import { ApiError } from "../../utils/ApiError";
+import { notifyAdmins } from "../../lib/adminNotify.service";
 
 function duplicate(error: unknown): never { if (error instanceof Error && "code" in error && error.code === 11000) throw ApiError.conflict("A volunteer with this mobile or email already exists for Namo Gange"); throw error; }
 function serialize(row: INamoVolunteer, detail = false) {
@@ -12,7 +13,7 @@ function serialize(row: INamoVolunteer, detail = false) {
   if (detail && row.accountNo) value.accountMasked = `********${decryptField(row.accountNo).slice(-4)}`;
   return value;
 }
-export async function apply(organisationId: string, input: Record<string, unknown>) { try { const row = await NamoVolunteer.create({ ...input, organisationId, status: "PENDING_REVIEW" }); return { id: row._id.toString(), status: row.status }; } catch (error) { return duplicate(error); } }
+export async function apply(organisationId: string, input: Record<string, unknown>) { try { const row = await NamoVolunteer.create({ ...input, organisationId, status: "PENDING_REVIEW" }); await notifyAdmins("NAMOGANGE", "VOLUNTEER", `New volunteer application — ${String(input.applicantName ?? "")}`, `${String(input.city ?? "")}`.trim()); return { id: row._id.toString(), status: row.status }; } catch (error) { return duplicate(error); } }
 export async function list(organisationId: string, status?: NamoVolunteerStatus) { return (await NamoVolunteer.find({ organisationId, ...(status ? { status } : {}) }).sort({ createdAt: -1 })).map((row) => serialize(row)); }
 export async function get(organisationId: string, id: string) { if (!Types.ObjectId.isValid(id)) throw ApiError.notFound("Volunteer not found"); const row = await NamoVolunteer.findOne({ _id: id, organisationId }).select("+aadhaar +accountNo"); if (!row) throw ApiError.notFound("Volunteer not found"); return serialize(row, true); }
 export async function update(organisationId: string, id: string, input: Record<string, unknown>) { if (!Types.ObjectId.isValid(id)) throw ApiError.notFound("Volunteer not found"); const row = await NamoVolunteer.findOne({ _id: id, organisationId }).select("+aadhaar +accountNo"); if (!row) throw ApiError.notFound("Volunteer not found"); row.set(input); try { await row.save(); } catch (error) { return duplicate(error); } return get(organisationId, id); }

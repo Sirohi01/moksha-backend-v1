@@ -4,6 +4,7 @@ import { generateArogyaDelegateCode } from "../../lib/counter.service";
 import { sendArogyaAdminLeadEmail, sendArogyaGroupThankYouEmail, sendArogyaThankYouEmail } from "../../lib/arogyaNotify.service";
 import { maybeDecrypt } from "../../lib/crypto";
 import { writeAuditLog } from "../../lib/audit.service";
+import { notifyAdmins } from "../../lib/adminNotify.service";
 import { ArogyaDelegateRegistration, IArogyaDelegateRegistration } from "../../models/arogyaDelegateRegistration.model";
 import { ArogyaPass } from "../../models/arogyaPass.model";
 import { ArogyaPaymentMode, IArogyaPayment } from "../../models/arogyaPayment.model";
@@ -54,18 +55,11 @@ export async function initiate(organisationId: string, channel: "email" | "whats
 export async function verifyOtpStep(organisationId: string, channel: "email" | "whatsapp", destination: string, otp: string) {
   await otpService.verifyOtp(organisationId, channel, destination, otp);
 }
-
-/** "Online (Razorpay)" for a real gateway payment; the human-readable offline mode otherwise —
- * shown in both the delegate's own confirmation email and the admin lead-notification email. */
 function paymentModeLabel(payment: IArogyaPayment): string {
   if (payment.gateway === "RAZORPAY") return "Online (Razorpay)";
   const labels: Record<string, string> = { CASH: "Cash", CHEQUE: "Cheque", PAYTM: "Paytm", NEFT_RTGS: "NEFT/RTGS", OTHER: "Other" };
   return labels[payment.paymentMode ?? "OTHER"] ?? "Offline";
 }
-
-/** Shared by the public OTP-verified flow and the admin offline-recording flow — the only
- * difference between them is what proves the registration is legitimate (a verified OTP vs. an
- * authenticated admin recording cash-in-hand), never how the registration/payment link is formed. */
 async function buildSingleRegistration(organisationId: string, payment: IArogyaPayment, form: DelegateFormFields) {
   const pass = await ArogyaPass.findById(payment.passId);
   if (!pass) throw ApiError.internal("Linked pass no longer exists");
@@ -97,12 +91,13 @@ async function buildSingleRegistration(organisationId: string, payment: IArogyaP
     delegateId: delegateCode, fullName: form.fullName, email: form.email, mobile: form.mobile,
     designation: form.designation, organization: form.organization, passName: pass.name,
     amountRupees, selectedDays: payment.selectedDays, paymentMode,
-  }).catch(() => {});
+  }).catch(() => { });
   await sendArogyaAdminLeadEmail({
     delegateId: delegateCode, fullName: form.fullName, email: form.email, mobile: form.mobile,
     designation: form.designation, organization: form.organization, passName: pass.name,
     amountRupees, selectedDays: payment.selectedDays, paymentMode, isGroup: false,
-  }).catch(() => {});
+  }).catch(() => { });
+  await notifyAdmins("AROGYA", "DELEGATE", `New delegate registration — ${form.fullName}`, `${pass.name} · ₹${amountRupees.toLocaleString("en-IN")}`, "/arogya-delegates");
   return registration;
 }
 
@@ -163,12 +158,13 @@ async function buildGroupRegistrations(
   await sendArogyaGroupThankYouEmail({
     groupId, primaryContactName: primary.fullName, organization: primary.organization, passName: pass.name,
     amountRupees, selectedDays: payment.selectedDays, members: memberSummaries, primaryEmail: primary.email,
-  }).catch(() => {});
+  }).catch(() => { });
   await sendArogyaAdminLeadEmail({
     delegateId: groupId, fullName: primary.fullName, email: primary.email, mobile: primary.mobile,
     designation: primary.designation, organization: primary.organization, passName: pass.name,
     amountRupees, selectedDays: payment.selectedDays, paymentMode, isGroup: true, members: memberSummaries,
-  }).catch(() => {});
+  }).catch(() => { });
+  await notifyAdmins("AROGYA", "DELEGATE", `New group registration — ${primary.fullName} (+${members.length})`, `${pass.name} · ₹${amountRupees.toLocaleString("en-IN")}`, "/arogya-delegates");
   return registrations;
 }
 

@@ -2,6 +2,7 @@ import { Types } from "mongoose";
 import { decryptField, maybeDecrypt } from "../../lib/crypto";
 import { IMember, Member, MemberStatus } from "../../models/member.model";
 import { ApiError } from "../../utils/ApiError";
+import { notifyAdmins } from "../../lib/adminNotify.service";
 
 type MemberInput = Record<string, unknown>;
 
@@ -27,6 +28,7 @@ function serialize(member: IMember) {
 export async function createMember(organisationId: string, input: MemberInput) {
   try {
     const member = await Member.create({ ...input, organisationId, status: "PENDING" });
+    await notifyAdmins("NAMOGANGE", "MEMBER", `New membership application — ${String(input.applicantName ?? "")}`, `${String(input.city ?? "")} ${String(input.state ?? "")}`.trim(), "/members");
     return { id: member._id.toString(), status: member.status };
   } catch (error) { return duplicateError(error); }
 }

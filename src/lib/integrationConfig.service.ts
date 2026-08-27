@@ -28,6 +28,7 @@ export interface SmtpIntegrationConfig {
 export interface OtpIntegrationConfig {
   msg91?: { authKey: string; templateId: string; senderId?: string };
   aisensy?: { apiKey: string; campaignOtp: string };
+  opus?: { apiKey: string };
 }
 
 type IntegrationEnv = typeof env;
@@ -55,12 +56,6 @@ function requireValues<T extends Record<string, string | undefined>>(
   }
   return values as { [K in keyof T]: string };
 }
-
-/**
- * Resolves credentials by organisation without cross-organisation fallback. The unprefixed
- * variables are the existing Moksha configuration and remain mapped to MOKSHA for backwards
- * compatibility. Namo Gange and Arogya must each provide their own explicit variables.
- */
 export function resolveCloudinaryConfig(
   organisationCode: string,
   source: IntegrationEnv = env
@@ -143,6 +138,7 @@ export function resolveOtpConfig(
   const msg91SenderId = source[`${prefix}MSG91_SENDER_ID` as keyof IntegrationEnv] as string | undefined;
   const aisensyApiKey = source[`${prefix}AISENSY_API_KEY` as keyof IntegrationEnv] as string | undefined;
   const aisensyCampaignOtp = source[`${prefix}AISENSY_CAMPAIGN_OTP` as keyof IntegrationEnv] as string | undefined;
+  const opusApiKey = code === "NAMOGANGE" ? source.NAMOGANGE_OPUS_API_KEY : undefined;
 
   if ((msg91AuthKey && !msg91TemplateId) || (!msg91AuthKey && msg91TemplateId)) {
     throw ApiError.internal(`MSG91 is not configured for ${code}; authKey and templateId are both required`);
@@ -150,7 +146,7 @@ export function resolveOtpConfig(
   if ((aisensyApiKey && !aisensyCampaignOtp) || (!aisensyApiKey && aisensyCampaignOtp)) {
     throw ApiError.internal(`AiSensy is not configured for ${code}; apiKey and campaignOtp are both required`);
   }
-  if (!msg91AuthKey && !aisensyApiKey) {
+  if (!msg91AuthKey && !aisensyApiKey && !opusApiKey) {
     throw ApiError.internal(`OTP delivery is not configured for ${code}`);
   }
   return {
@@ -160,5 +156,6 @@ export function resolveOtpConfig(
     aisensy: aisensyApiKey && aisensyCampaignOtp
       ? { apiKey: aisensyApiKey, campaignOtp: aisensyCampaignOtp }
       : undefined,
+    opus: opusApiKey ? { apiKey: opusApiKey } : undefined,
   };
 }

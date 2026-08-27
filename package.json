@@ -30,6 +30,11 @@
     "migrate:import:arogya-cms": "tsx migration-tools/arogya-cms-import.ts",
     "migrate:import:namo-cms": "tsx migration-tools/namogange-cms-import.ts",
     "migrate:import:arogya-lookups": "tsx migration-tools/arogya-lookups-import.ts",
+    "migrate:import:namo-jobs": "tsx migration-tools/namogange-jobs-import.ts",
+    "migrate:import:namo-members": "tsx migration-tools/namogange-members-import.ts",
+    "migrate:import:namo-volunteers": "tsx migration-tools/namogange-volunteers-import.ts",
+    "migrate:import:namo-leads": "tsx migration-tools/namogange-leads-import.ts",
+    "migrate:import:namo-remaining": "tsx migration-tools/namogange-remaining-import.ts",
     "test": "jest"
   },
   "dependencies": {
