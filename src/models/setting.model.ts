@@ -105,6 +105,14 @@ export interface ISetting extends Document {
   };
   aboutPage?: ISetting["landingPage"];
   servicesPage?: ISetting["landingPage"];
+  ambulancePage?: ISetting["landingPage"];
+  panditPage?: ISetting["landingPage"];
+  funeralPage?: ISetting["landingPage"];
+  funeralDecorationPage?: ISetting["landingPage"];
+  prayerHallPage?: ISetting["landingPage"];
+  specialServicePage?: ISetting["landingPage"];
+  callingRelativesPage?: ISetting["landingPage"];
+  harsevanPage?: ISetting["landingPage"];
   unclaimedBodyPage?: ISetting["landingPage"];
   volunteerPage?: ISetting["landingPage"];
   partnershipPage?: ISetting["landingPage"];
@@ -334,6 +342,23 @@ const settingSchema = new Schema<ISetting>(
         default: [],
       },
     },
+    servicesPage: { type: Schema.Types.Mixed },
+    ambulancePage: { type: Schema.Types.Mixed },
+    panditPage: { type: Schema.Types.Mixed },
+    funeralPage: { type: Schema.Types.Mixed },
+    funeralDecorationPage: { type: Schema.Types.Mixed },
+    prayerHallPage: { type: Schema.Types.Mixed },
+    specialServicePage: { type: Schema.Types.Mixed },
+    callingRelativesPage: { type: Schema.Types.Mixed },
+    harsevanPage: { type: Schema.Types.Mixed },
+    unclaimedBodyPage: { type: Schema.Types.Mixed },
+    volunteerPage: { type: Schema.Types.Mixed },
+    partnershipPage: { type: Schema.Types.Mixed },
+    csrPage: { type: Schema.Types.Mixed },
+    requestHelpPage: { type: Schema.Types.Mixed },
+    donationPage: { type: Schema.Types.Mixed },
+    contactPage: { type: Schema.Types.Mixed },
+    trackPage: { type: Schema.Types.Mixed },
   },
   { timestamps: true, strict: false }
 );
