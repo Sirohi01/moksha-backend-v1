@@ -40,6 +40,12 @@ export async function seedWebsite(): Promise<void> {
   settings.contactPage = { sections: extraModule.defaultContactSections as never };
   settings.trackPage = { sections: extraModule.defaultTrackSections as never };
 
+  // Legal Pages
+  settings.privacyPage = { sections: extraModule.defaultPrivacySections as never };
+  settings.termsPage = { sections: extraModule.defaultTermsSections as never };
+  settings.refundPage = { sections: extraModule.defaultRefundSections as never };
+  settings.conductPage = { sections: extraModule.defaultConductSections as never };
+
   await settings.save();
   logger.info(`All website pages seeded successfully.`);
 }
