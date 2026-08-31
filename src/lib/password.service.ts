@@ -16,7 +16,9 @@ export async function comparePassword(password: string, hash: string): Promise<b
   // callers should re-hash with hashPassword() on a successful legacy login so accounts migrate
   // transparently on next use instead of needing a bulk migration script.
   if (hash.startsWith("$2a$") || hash.startsWith("$2b$") || hash.startsWith("$2y$")) {
-    const bcrypt = await import("bcryptjs");
+    // bcryptjs is a UMD/CJS module, so a dynamic import()'s named-export synthesis doesn't pick up
+    // its methods — only `.default` reliably holds them under this project's CJS interop settings.
+    const bcrypt = (await import("bcryptjs")).default;
     return bcrypt.compare(password, hash);
   }
   return argon2.verify(hash, password);
