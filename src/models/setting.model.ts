@@ -121,6 +121,10 @@ export interface ISetting extends Document {
   donationPage?: ISetting["landingPage"];
   contactPage?: ISetting["landingPage"];
   trackPage?: ISetting["landingPage"];
+  privacyPage?: ISetting["landingPage"];
+  termsPage?: ISetting["landingPage"];
+  refundPage?: ISetting["landingPage"];
+  conductPage?: ISetting["landingPage"];
   updatedAt: Date;
 }
 
@@ -359,6 +363,10 @@ const settingSchema = new Schema<ISetting>(
     donationPage: { type: Schema.Types.Mixed },
     contactPage: { type: Schema.Types.Mixed },
     trackPage: { type: Schema.Types.Mixed },
+    privacyPage: { type: Schema.Types.Mixed },
+    termsPage: { type: Schema.Types.Mixed },
+    refundPage: { type: Schema.Types.Mixed },
+    conductPage: { type: Schema.Types.Mixed },
   },
   { timestamps: true, strict: false }
 );
