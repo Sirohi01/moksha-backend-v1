@@ -1,6 +1,8 @@
-import { AccessGrant } from "../models/accessGrant.model";
+import { AccessGrant, IAccessGrant } from "../models/accessGrant.model";
 import { Organisation } from "../models/organisation.model";
 import { Project, IProject } from "../models/project.model";
+import { IUser } from "../models/user.model";
+import { resolvePermissionsForRoleId, resolveRoleAndPermissions } from "./permissions.service";
 
 export interface MyAccessProject {
   _id: string;
@@ -29,13 +31,17 @@ function toProjectSummary(project: IProject): MyAccessProject {
     programCode: project.programCode,
   };
 }
-export async function resolveMyAccess(userId: string): Promise<MyAccess> {
+function findActiveGrants(userId: string) {
   const now = new Date();
-  const grants = await AccessGrant.find({
+  return AccessGrant.find({
     userId,
     status: "ACTIVE",
     $or: [{ expiresAt: { $exists: false } }, { expiresAt: null }, { expiresAt: { $gt: now } }],
   });
+}
+
+export async function resolveMyAccess(userId: string): Promise<MyAccess> {
+  const grants = await findActiveGrants(userId);
 
   const isSuperAdmin = grants.some((grant) => grant.organisationId === null);
 
@@ -85,4 +91,25 @@ export async function resolveMyAccess(userId: string): Promise<MyAccess> {
   }
 
   return { isSuperAdmin: false, organisations };
+}
+
+export interface EffectiveAccess {
+  roleSlug?: string;
+  isSuperAdmin: boolean;
+  permissions: string[];
+}
+export async function resolveEffectiveAccess(user: Pick<IUser, "_id" | "roleId">): Promise<EffectiveAccess> {
+  const { roleSlug, permissions: basePermissions } = await resolveRoleAndPermissions(user);
+  const grants: IAccessGrant[] = await findActiveGrants(user._id.toString());
+
+  const permissionSet = new Set(basePermissions);
+  let isSuperAdmin = roleSlug === "super_admin";
+
+  for (const grant of grants) {
+    if (grant.organisationId === null) isSuperAdmin = true;
+    const { permissions: grantPermissions } = await resolvePermissionsForRoleId(grant.roleId);
+    for (const key of grantPermissions) permissionSet.add(key);
+  }
+
+  return { roleSlug, isSuperAdmin, permissions: Array.from(permissionSet) };
 }

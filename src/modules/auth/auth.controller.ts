@@ -3,16 +3,11 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { sendSuccess } from "../../utils/ApiResponse";
 import { ApiError } from "../../utils/ApiError";
 import * as authService from "./auth.service";
-import { resolveRoleAndPermissions } from "../../lib/permissions.service";
-import { resolveMyAccess } from "../../lib/accessResolution.service";
+import { resolveEffectiveAccess, resolveMyAccess } from "../../lib/accessResolution.service";
 import { listSessions, revokeSessionById, DeviceInfo } from "../../lib/session.service";
-import { IUser } from "../../models/user.model";
-
-/** Enriches the auth response with the role/permission snapshot at login time — purely for the
- * frontend to render permission-aware UI. Every subsequent request still re-resolves permissions
- * fresh via requireAuth, so a stale snapshot here can never grant access the server wouldn't. */
+import { IUser, User } from "../../models/user.model";
 async function toSafeUser(user: IUser) {
-  const { roleSlug, permissions } = await resolveRoleAndPermissions(user);
+  const { roleSlug, permissions, isSuperAdmin } = await resolveEffectiveAccess(user);
   return {
     id: user._id,
     name: user.name,
@@ -22,6 +17,7 @@ async function toSafeUser(user: IUser) {
     userType: user.userType,
     roleSlug,
     permissions,
+    isSuperAdmin,
   };
 }
 
@@ -87,11 +83,16 @@ export const changePassword = asyncHandler(async (req: Request, res: Response) =
 
 export const getMe = asyncHandler(async (req: Request, res: Response) => {
   if (!req.auth) throw ApiError.unauthorized();
+  const user = await User.findById(req.auth.userId).select("roleId");
+  const { roleSlug, permissions, isSuperAdmin } = user
+    ? await resolveEffectiveAccess(user)
+    : { roleSlug: req.auth.roleSlug, permissions: Array.from(req.auth.permissions), isSuperAdmin: false };
   sendSuccess(res, 200, "Current session", {
     userId: req.auth.userId,
     userType: req.auth.userType,
-    roleSlug: req.auth.roleSlug,
-    permissions: Array.from(req.auth.permissions),
+    roleSlug,
+    permissions,
+    isSuperAdmin,
     twoFactorPending: req.auth.twoFactorPending,
   });
 });
