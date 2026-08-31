@@ -7,6 +7,20 @@ const longText = z.string().trim().max(5000).optional();
 const urlText = z.string().trim().max(2000).optional();
 const buttonText = z.string().trim().max(200).optional();
 
+const seoSchema = z.object({
+  metaTitle: z.string().trim().max(65).optional(),
+  metaDescription: z.string().trim().max(155).optional(),
+  metaKeywords: z.string().trim().optional(),
+  canonicalUrl: urlText,
+  ogTitle: z.string().trim().optional(),
+  ogDescription: z.string().trim().optional(),
+  ogImage: urlText,
+  schemaMarkup: z.string().trim().optional(),
+  h1Tag: z.string().trim().optional(),
+  breadcrumbName: z.string().trim().optional(),
+  internalLinks: z.array(z.object({ label: z.string(), url: z.string() })).optional(),
+}).passthrough();
+
 const landingSectionItemSchema = z.object({
   title: z.string().trim().max(300).optional(),
   label: z.string().trim().max(300).optional(),
@@ -132,9 +146,18 @@ export const updateSettingSchema = z.object({
       .optional(),
     landingPage: z
       .object({
+        seo: seoSchema.optional(),
         sections: z.array(landingSectionSchema).optional(),
       })
       .optional(),
+    advancedSeo: z.object({
+      globalHeadCode: z.string().optional(),
+      globalBodyCode: z.string().optional(),
+      defaultOgImage: urlText,
+      googleSearchConsoleVerification: z.string().optional(),
+      robotsTxt: z.string().optional(),
+    }).passthrough().optional(),
+    notFoundPage: z.object({ seo: seoSchema.optional(), sections: z.array(landingSectionSchema).optional() }).passthrough().optional(),
     aboutPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),
     servicesPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),
     unclaimedBodyPage: z.object({ sections: z.array(landingSectionSchema).optional() }).optional(),

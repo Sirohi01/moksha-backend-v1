@@ -1,5 +1,26 @@
 import { Schema, model, Document, Types } from "mongoose";
 
+export interface ISeoOptions {
+  metaTitle?: string;
+  metaDescription?: string;
+  metaKeywords?: string;
+  canonicalUrl?: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  ogImage?: string;
+  schemaMarkup?: string;
+  h1Tag?: string;
+  breadcrumbName?: string;
+  internalLinks?: { label: string; url: string }[];
+  robotsIndex?: boolean; // true = index, false = noindex
+  robotsFollow?: boolean; // true = follow, false = nofollow
+}
+
+export interface IPageConfig {
+  seo?: ISeoOptions;
+  sections?: any[];
+}
+
 /** Single-document collection holding site-wide settings, edited from the admin panel. */
 export interface ISetting extends Document {
   _id: Types.ObjectId;
@@ -27,7 +48,17 @@ export interface ISetting extends Document {
   };
   banners: { image: string; link?: string; title?: string }[];
   socialLinks: { platform: string; url: string }[];
-  landingPage?: {
+  advancedSeo?: {
+    globalHeadCode?: string;
+    globalBodyCode?: string;
+    defaultOgImage?: string;
+    googleSearchConsoleVerification?: string;
+    ga4MeasurementId?: string;
+    gtmContainerId?: string;
+    robotsTxt?: string;
+  };
+  notFoundPage?: IPageConfig;
+  landingPage?: IPageConfig & {
     sections: {
       key: string;
       name: string;
@@ -128,6 +159,33 @@ export interface ISetting extends Document {
   updatedAt: Date;
 }
 
+const seoSchema = new Schema<ISeoOptions>(
+  {
+    metaTitle: { type: String, trim: true, maxlength: 65 },
+    metaDescription: { type: String, trim: true, maxlength: 155 },
+    metaKeywords: { type: String, trim: true },
+    canonicalUrl: { type: String, trim: true },
+    ogTitle: { type: String, trim: true },
+    ogDescription: { type: String, trim: true },
+    ogImage: { type: String, trim: true },
+    schemaMarkup: { type: String, trim: true },
+    h1Tag: { type: String, trim: true },
+    breadcrumbName: { type: String, trim: true },
+    robotsIndex: { type: Boolean, default: true },
+    robotsFollow: { type: Boolean, default: true },
+    internalLinks: {
+      type: [
+        {
+          label: { type: String, trim: true },
+          url: { type: String, trim: true },
+        },
+      ],
+      default: [],
+    },
+  },
+  { _id: false }
+);
+
 const settingSchema = new Schema<ISetting>(
   {
     siteName: { type: String, default: "Moksha Sewa" },
@@ -164,7 +222,18 @@ const settingSchema = new Schema<ISetting>(
       ],
       default: [],
     },
+    advancedSeo: {
+      globalHeadCode: { type: String },
+      globalBodyCode: { type: String },
+      defaultOgImage: { type: String },
+      googleSearchConsoleVerification: { type: String },
+      ga4MeasurementId: { type: String },
+      gtmContainerId: { type: String },
+      robotsTxt: { type: String },
+    },
+    notFoundPage: { type: Schema.Types.Mixed },
     landingPage: {
+      seo: { type: seoSchema },
       sections: {
         type: [
           {

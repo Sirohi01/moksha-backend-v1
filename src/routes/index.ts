@@ -23,6 +23,8 @@ import auditRoutes from "../modules/audit/audit.routes";
 import newsletterRoutes from "../modules/newsletter/newsletter.routes";
 import adminNotificationRoutes from "../modules/adminNotification/adminNotification.routes";
 
+import redirectRoutes from "../modules/redirect/redirect.routes";
+
 const router = Router();
 
 router.use("/auth", authRoutes);
@@ -48,5 +50,6 @@ router.use("/roles", roleRoutes);
 router.use("/audit", auditRoutes);
 router.use("/newsletter", newsletterRoutes);
 router.use("/notifications", adminNotificationRoutes);
+router.use("/redirects", redirectRoutes);
 
 export default router;
