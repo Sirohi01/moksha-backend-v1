@@ -28,6 +28,13 @@ export const listAdmin = asyncHandler(async (req: Request, res: Response) => {
 export const getAdminOne = asyncHandler(async (req: Request, res: Response) =>
   sendSuccess(res, 200, "Registration fetched", await registrationService.getAdmin(scopeId(req), req.params.id))
 );
+export const updateAdmin = asyncHandler(async (req: Request, res: Response) =>
+  sendSuccess(res, 200, "Registration updated", await registrationService.updateAdmin(scopeId(req), userId(req), req.params.id, req.body))
+);
+export const exportDelegatesCsv = asyncHandler(async (req: Request, res: Response) => {
+  const csv = await registrationService.exportCsv(scopeId(req));
+  res.type("text/csv").attachment(`arogya-delegates-${Date.now()}.csv`).send(csv);
+});
 
 export const initiate = asyncHandler(async (req: Request, res: Response) => {
   const { channel, email, whatsappNumber, mobile, fullName } = req.body as {
@@ -78,6 +85,14 @@ export const adminCreateOfflineGroup = asyncHandler(async (req: Request, res: Re
   });
   sendSuccess(res, 201, "Offline group registration recorded", registrations);
 });
+
+export const listPaymentsAdmin = asyncHandler(async (req: Request, res: Response) => {
+  const { status, gateway } = req.query as { status?: string; gateway?: string };
+  sendSuccess(res, 200, "Payments fetched", await paymentService.listAdmin(scopeId(req), { status, gateway }));
+});
+export const getPaymentAdmin = asyncHandler(async (req: Request, res: Response) =>
+  sendSuccess(res, 200, "Payment fetched", await paymentService.getAdmin(scopeId(req), req.params.id))
+);
 
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   const result = await paymentService.createOrder(await orgId(), ORG_CODE, req.body);

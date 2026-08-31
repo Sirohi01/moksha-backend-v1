@@ -106,6 +106,34 @@ export async function verifyPayment(organisationCode: string, input: VerifyInput
   return { paymentRecordId: payment._id.toString() };
 }
 
+interface AdminListFilters {
+  status?: string;
+  gateway?: string;
+}
+/** Admin "Payments / Transactions" view — the only place a CREATED-but-never-completed or FAILED
+ * order is visible at all; every other screen only ever sees a payment indirectly, through the
+ * delegate registration it eventually produced (and a CREATED/FAILED order never produces one). */
+export async function listAdmin(organisationId: string, filter: AdminListFilters) {
+  const query: Record<string, unknown> = { organisationId };
+  if (filter.status) query.status = filter.status;
+  if (filter.gateway) query.gateway = filter.gateway;
+  return ArogyaPayment.find(query)
+    .sort({ createdAt: -1 })
+    .populate("passId", "name")
+    .populate("delegateRegistrationId", "fullName delegateCode")
+    .populate("recordedBy", "name");
+}
+
+export async function getAdmin(organisationId: string, id: string) {
+  if (!Types.ObjectId.isValid(id)) throw ApiError.notFound("Payment not found");
+  const payment = await ArogyaPayment.findOne({ _id: id, organisationId })
+    .populate("passId", "name")
+    .populate("delegateRegistrationId", "fullName delegateCode")
+    .populate("recordedBy", "name");
+  if (!payment) throw ApiError.notFound("Payment not found");
+  return payment;
+}
+
 export async function getPaidUnlinkedPayment(organisationId: string, paymentRecordId: string) {
   if (!Types.ObjectId.isValid(paymentRecordId)) throw ApiError.badRequest("Invalid payment reference");
   const payment = await ArogyaPayment.findOne({ _id: paymentRecordId, organisationId });

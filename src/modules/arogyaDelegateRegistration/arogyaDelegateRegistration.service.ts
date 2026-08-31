@@ -183,6 +183,62 @@ export async function completeGroup(organisationId: string, input: CompleteGroup
   return buildGroupRegistrations(organisationId, payment, input.primary, input.members);
 }
 
+type UpdatableDelegateFields = Partial<Omit<DelegateFormFields, "source">>;
+export async function updateAdmin(organisationId: string, actorUserId: string, id: string, patch: UpdatableDelegateFields) {
+  if (!Types.ObjectId.isValid(id)) throw ApiError.notFound("Registration not found");
+  const registration = await ArogyaDelegateRegistration.findOne({ _id: id, organisationId });
+  if (!registration) throw ApiError.notFound("Registration not found");
+
+  const before = serialize(registration);
+  Object.assign(registration, patch);
+  await registration.save();
+
+  await writeAuditLog({
+    userId: actorUserId, action: "arogya_delegate.updated", entityType: "ArogyaDelegateRegistration",
+    entityId: registration._id.toString(), before, after: serialize(registration),
+  });
+  return serialize(registration);
+}
+
+function toCsvValue(value: unknown): string {
+  const str = String(value ?? "");
+  return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+}
+function toCsv(rows: Record<string, unknown>[]): string {
+  if (rows.length === 0) return "";
+  const headers = Object.keys(rows[0]);
+  const lines = [headers.join(",")];
+  for (const row of rows) lines.push(headers.map((h) => toCsvValue(row[h])).join(","));
+  return lines.join("\n");
+}
+
+export async function exportCsv(organisationId: string) {
+  const entries = await ArogyaDelegateRegistration.find({ organisationId }).sort({ createdAt: -1 });
+  return toCsv(
+    entries.map((entry) => {
+      const row = serialize(entry) as Record<string, unknown>;
+      return {
+        delegateCode: row.delegateCode,
+        fullName: row.fullName,
+        email: row.email,
+        mobile: row.mobile,
+        organization: row.organization ?? "",
+        designation: row.designation ?? "",
+        city: row.city ?? "",
+        state: row.state ?? "",
+        country: row.country ?? "",
+        registrationType: row.registrationType,
+        passName: row.passName,
+        selectedDays: Array.isArray(row.selectedDays) ? (row.selectedDays as number[]).join("|") : "",
+        amountRupees: (row.amountPaise as number) / 100,
+        couponCode: row.couponCode ?? "",
+        isSpeaker: row.isSpeaker ? "Yes" : "No",
+        registeredAt: (entry.createdAt as Date).toISOString(),
+      };
+    })
+  );
+}
+
 interface AdminOfflineBase {
   passId: string;
   selectedDays: number[];
@@ -190,13 +246,6 @@ interface AdminOfflineBase {
   paymentMode: ArogyaPaymentMode;
   note?: string;
 }
-
-/** Admin-recorded registrations for walk-in/cash/cheque/UPI delegates the legacy system had no
- * way to represent (it assumed every registration came through Razorpay). Pricing is still
- * computed server-side from the real pass/coupon records inside createOfflinePayment — an admin
- * can choose *how* payment was received, never invent the amount — and the payment is created
- * already PAID so it flows through the exact same registration-linking/coupon-consumption path as
- * an online payment (buildSingleRegistration/buildGroupRegistrations above), not a separate one. */
 export async function adminCreateOfflineSingle(
   organisationId: string,
   actorUserId: string,

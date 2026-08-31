@@ -72,6 +72,10 @@ const offlineBase = z.object({
   paymentMode: paymentModeSchema,
   note: z.string().trim().max(300).optional(),
 });
+export const updateDelegateSchema = z.object({
+  params: z.object({ id: z.string().trim().min(1) }),
+  body: delegateFormFields.omit({ source: true }).partial(),
+});
 
 export const adminOfflineSingleSchema = z.object({
   body: offlineBase.extend({ form: delegateFormFields }),
