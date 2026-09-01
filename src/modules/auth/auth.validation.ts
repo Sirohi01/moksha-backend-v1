@@ -30,9 +30,13 @@ export const registerSchema = z.object({
 
 export const loginSchema = z.object({
   body: z.object({
-    email: z.string().trim().email(),
+    identifier: z.string().trim().min(1, "Email, mobile number or employee ID is required").optional(),
+    email: z.string().trim().email().optional(),
     password: z.string().min(1, "Password is required"),
     totpCode: z.string().trim().optional(),
+  }).refine((body) => Boolean(body.identifier || body.email), {
+    message: "Email, mobile number or employee ID is required",
+    path: ["identifier"],
   }),
 });
 

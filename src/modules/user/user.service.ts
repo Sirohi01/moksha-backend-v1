@@ -11,6 +11,7 @@ interface InviteStaffInput {
   name: string;
   email: string;
   phone: string;
+  employeeId: string;
   roleId: string;
   avatarUrl?: string;
 }
@@ -29,8 +30,9 @@ function serializeStaff(user: IUser, roleName?: string) {
  * password on screen either way.
  */
 export async function inviteStaff(input: InviteStaffInput, actorUserId: string) {
-  const existing = await User.findOne({ $or: [{ phone: input.phone }, { email: input.email }] });
-  if (existing) throw ApiError.conflict("An account with this phone or email already exists");
+  const employeeId = input.employeeId.trim().toUpperCase();
+  const existing = await User.findOne({ $or: [{ phone: input.phone }, { email: input.email }, { employeeId }] });
+  if (existing) throw ApiError.conflict("An account with this phone, email or employee ID already exists");
 
   const role = await Role.findById(input.roleId);
   if (!role) throw ApiError.badRequest("Select a valid role");
@@ -42,6 +44,7 @@ export async function inviteStaff(input: InviteStaffInput, actorUserId: string) 
     name: input.name,
     email: input.email,
     phone: input.phone,
+    employeeId,
     avatarUrl: input.avatarUrl,
     passwordHash,
     userType: "INTERNAL",
@@ -100,6 +103,7 @@ interface UpdateStaffDetailsInput {
   name: string;
   email: string;
   phone: string;
+  employeeId: string;
   roleId: string;
   avatarUrl?: string;
 }
@@ -113,9 +117,9 @@ export async function updateStaffDetails(userId: string, input: UpdateStaffDetai
 
   const duplicate = await User.findOne({
     _id: { $ne: userId },
-    $or: [{ phone: input.phone }, { email: input.email }],
+    $or: [{ phone: input.phone }, { email: input.email }, { employeeId: input.employeeId.trim().toUpperCase() }],
   });
-  if (duplicate) throw ApiError.conflict("Another account already uses this phone or email");
+  if (duplicate) throw ApiError.conflict("Another account already uses this phone, email or employee ID");
 
   const role = await Role.findById(input.roleId);
   if (!role) throw ApiError.badRequest("Select a valid role");
@@ -123,6 +127,7 @@ export async function updateStaffDetails(userId: string, input: UpdateStaffDetai
   user.name = input.name;
   user.email = input.email;
   user.phone = input.phone;
+  user.employeeId = input.employeeId.trim().toUpperCase();
   user.roleId = role._id;
   if (input.avatarUrl !== undefined) user.avatarUrl = input.avatarUrl;
   await user.save();

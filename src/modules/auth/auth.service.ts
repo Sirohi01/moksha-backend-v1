@@ -111,14 +111,20 @@ interface LoginResult {
   twoFactorSetupRequired: boolean;
 }
 
-export async function loginWithEmail(
-  email: string,
+export async function loginWithIdentifier(
+  identifier: string,
   password: string,
   totpCode?: string,
   deviceInfo?: DeviceInfo
 ): Promise<LoginResult> {
-  const user = await User.findOne({ email }).select("+passwordHash +twoFactor.secret +twoFactor.backupCodeHashes");
-  if (!user || !user.passwordHash) throw ApiError.unauthorized("Invalid email or password");
+  const normalized = identifier.trim();
+  const lookup = normalized.includes("@")
+    ? { email: normalized.toLowerCase() }
+    : /^\d{10}$/.test(normalized)
+      ? { phone: normalized }
+      : { employeeId: normalized.toUpperCase() };
+  const user = await User.findOne(lookup).select("+passwordHash +twoFactor.secret +twoFactor.backupCodeHashes");
+  if (!user || !user.passwordHash) throw ApiError.unauthorized("Invalid login credentials");
 
   if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
     throw ApiError.forbidden("Account temporarily locked due to failed login attempts. Try again later.");
@@ -131,7 +137,7 @@ export async function loginWithEmail(
       user.lockedUntil = new Date(Date.now() + LOCKOUT_DURATION_MS);
     }
     await user.save();
-    throw ApiError.unauthorized("Invalid email or password");
+    throw ApiError.unauthorized("Invalid login credentials");
   }
 
   // Checked only after a correct password — status is account-sensitive information that

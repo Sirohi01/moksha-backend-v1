@@ -58,8 +58,8 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const login = asyncHandler(async (req: Request, res: Response) => {
-  const { email, password, totpCode } = req.body;
-  const result = await authService.loginWithEmail(email, password, totpCode, extractDeviceInfo(req));
+  const { identifier, email, password, totpCode } = req.body;
+  const result = await authService.loginWithIdentifier(identifier ?? email, password, totpCode, extractDeviceInfo(req));
   sendSuccess(res, 200, "Logged in successfully", {
     user: await toSafeUser(result.user),
     accessToken: result.accessToken,

@@ -19,6 +19,7 @@ export interface IUser extends Document {
   _id: Types.ObjectId;
   name: string;
   email?: string;
+  employeeId?: string;
   phone: string;
   avatarUrl?: string;
   passwordHash?: string;
@@ -61,6 +62,7 @@ const userSchema = new Schema<IUser>(
     // email/phone are login-lookup keys — never encrypted, same documented constraint as the
     // fields this replaces (see fieldEncryption.ts's own note on why lookup keys are excluded).
     email: { type: String, trim: true, lowercase: true, sparse: true, unique: true },
+    employeeId: { type: String, trim: true, uppercase: true, sparse: true, unique: true, index: true },
     phone: { type: String, required: true, unique: true, trim: true, index: true },
     avatarUrl: { type: String, trim: true },
     passwordHash: { type: String, select: false },
