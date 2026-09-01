@@ -11,10 +11,9 @@ const adminGuards = [requireAuth, authorize("cms.update")];
 const handlers = buildAdminCrudHandlers(BlogPost, "Blog post");
 
 router.get("/", blogController.listPublicPosts);
-router.get("/:slug", blogController.getPublicPostBySlug);
-
 mountAdminCrudRoutes(router, handlers, adminGuards);
 router.post("/admin", ...adminGuards, validate(createBlogPostSchema), handlers.create);
 router.put("/admin/:id", ...adminGuards, validate(updateBlogPostSchema), handlers.update);
+router.get("/:slug", blogController.getPublicPostBySlug);
 
 export default router;
