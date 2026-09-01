@@ -85,10 +85,34 @@ async function fetchGa4(token: string | null) {
       run("30daysAgo", "today"),
       run("60daysAgo", "31daysAgo"),
     ]);
+    const pagesResponse = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${env.GA4_PROPERTY_ID}:runReport`, {
+      method: "POST",
+      signal: AbortSignal.timeout(20_000),
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dateRanges: [{ startDate: "30daysAgo", endDate: "today" }],
+        dimensions: [{ name: "pagePath" }],
+        metrics: [{ name: "screenPageViews" }, { name: "activeUsers" }, { name: "averageSessionDuration" }, { name: "bounceRate" }],
+        orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
+        limit: 250,
+      }),
+    });
+    if (!pagesResponse.ok) throw new Error(`GA4 page report returned ${pagesResponse.status}`);
+    const pagesBody = await pagesResponse.json() as {
+      rows?: Array<{ dimensionValues?: Array<{ value?: string }>; metricValues?: Array<{ value?: string }> }>;
+    };
+    const pages = (pagesBody.rows ?? []).map((row) => ({
+      path: row.dimensionValues?.[0]?.value ?? "/",
+      views: Number(row.metricValues?.[0]?.value ?? 0),
+      visitors: Number(row.metricValues?.[1]?.value ?? 0),
+      averageSessionSeconds: Number(row.metricValues?.[2]?.value ?? 0),
+      bounceRate: Number(row.metricValues?.[3]?.value ?? 0) * 100,
+    }));
     return source("connected", {
       users: values[0] ?? 0, sessions: values[1] ?? 0, pageViews: values[2] ?? 0,
       averageSessionSeconds: values[3] ?? 0, bounceRate: (values[4] ?? 0) * 100,
       conversions: values[5] ?? 0,
+      pages,
       growth: {
         users: growth(values[0] ?? 0, previous[0] ?? 0),
         sessions: growth(values[1] ?? 0, previous[1] ?? 0),
