@@ -8,6 +8,7 @@ const router = Router();
 const adminGuards = [requireAuth, authorize("settings.update")];
 
 router.get("/", settingController.getSettings);
+router.get("/system-alerts", settingController.getSystemAlerts);
 router.put("/admin", ...adminGuards, validate(updateSettingSchema), settingController.updateSettings);
 
 export default router;
