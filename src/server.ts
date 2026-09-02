@@ -4,6 +4,7 @@ import { env } from "./config/env";
 import { logger } from "./config/logger";
 import { processNotificationQueue } from "./lib/notificationQueue.service";
 import { captureSnapshot } from "./lib/reportSnapshot.service";
+import { runSystemServiceReminderSweep } from "./lib/systemServiceReminder.service";
 
 // PRD Phase E1 — 1 minute, so a notification on the shortest retry backoff step (also 1 minute)
 // gets picked up promptly rather than sitting until the next longer-spaced sweep.
@@ -11,6 +12,9 @@ const NOTIFICATION_QUEUE_INTERVAL_MS = 60_000;
 // PRD Phase F3 — hourly is plenty for a daily-bucketed trend snapshot; it just needs to be
 // refreshed a few times before the calendar day rolls over.
 const REPORT_SNAPSHOT_INTERVAL_MS = 60 * 60_000;
+// Expiry is day-granularity, so hourly is plenty to catch a threshold crossing well within the
+// same day it happens; the per-item dedupe guards keep repeated sweeps from double-firing.
+const SYSTEM_SERVICE_REMINDER_INTERVAL_MS = 60 * 60_000;
 
 async function start(): Promise<void> {
   await connectDB();
@@ -30,10 +34,16 @@ async function start(): Promise<void> {
     captureSnapshot().catch((err) => logger.error("reportSnapshot: capture failed", { err }));
   }, REPORT_SNAPSHOT_INTERVAL_MS);
 
+  runSystemServiceReminderSweep().catch((err) => logger.error("systemServiceReminder: initial sweep failed", { err }));
+  const systemServiceReminderTimer = setInterval(() => {
+    runSystemServiceReminderSweep().catch((err) => logger.error("systemServiceReminder: sweep failed", { err }));
+  }, SYSTEM_SERVICE_REMINDER_INTERVAL_MS);
+
   const shutdown = (signal: string) => {
     logger.info(`${signal} received, shutting down gracefully`);
     clearInterval(notificationQueueTimer);
     clearInterval(reportSnapshotTimer);
+    clearInterval(systemServiceReminderTimer);
     server.close(() => process.exit(0));
   };
 

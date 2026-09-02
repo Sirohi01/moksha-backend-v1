@@ -2,6 +2,7 @@ import { connectDB, disconnectDB } from "../config/db";
 import { logger } from "../config/logger";
 import { NotificationTemplate } from "../models/notificationTemplate.model";
 import { NotificationChannel, NotificationCategory } from "../utils/constants";
+import { p, pLast, muted, callout, button } from "../lib/emailFragments";
 
 interface TemplateSeed {
   key: string;
@@ -12,44 +13,9 @@ interface TemplateSeed {
 }
 
 // Every template's `body` is an HTML *fragment* — emailShell.ts wraps it in the full branded
-// document (header/footer, table layout) right before sending. These constants keep that
-// fragment's own styling consistent across templates; every rule stays inline (no <style> block)
-// for the same Gmail/Outlook-compatibility reason the shell itself is inline-only.
-const FONT = "Georgia, 'Times New Roman', Times, serif";
-const P = `margin:0 0 14px 0;font-size:14px;line-height:22px;color:#211611;font-family:${FONT};`;
-const P_LAST = `margin:0;font-size:14px;line-height:22px;color:#211611;font-family:${FONT};`;
-const MUTED = `margin:0 0 14px 0;font-size:12px;line-height:18px;color:#6b645c;font-family:${FONT};`;
-
-/** A bordered, tinted box for the one value in the email worth a glance without reading prose —
- * an amount, a case ID, a temporary password. */
-function callout(innerHtml: string): string {
-  return (
-    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 18px 0;">` +
-    `<tr><td bgcolor="#f3ead9" style="background-color:#f3ead9;border:1px solid #e7d9c0;padding:12px 16px;` +
-    `font-size:15px;font-weight:semibold;color:#8b6a3e;font-family:${FONT};">${innerHtml}</td></tr></table>`
-  );
-}
-
-function p(text: string): string {
-  return `<p style="${P}">${text}</p>`;
-}
-
-function pLast(text: string): string {
-  return `<p style="${P_LAST}">${text}</p>`;
-}
-
-function muted(text: string): string {
-  return `<p style="${MUTED}">${text}</p>`;
-}
-function button(url: string, label: string): string {
-  return (
-    `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 18px 0;">` +
-    `<tr><td bgcolor="#8b6a3e" style="background-color:#8b6a3e;">` +
-    `<a href="${url}" style="display:inline-block;padding:12px 26px;font-size:14px;font-weight:semibold;` +
-    `color:#ffffff;text-decoration:none;font-family:${FONT};">${label}</a>` +
-    `</td></tr></table>`
-  );
-}
+// document (header/footer, table layout) right before sending. p/pLast/muted/callout/button (from
+// lib/emailFragments.ts) keep that fragment's own styling consistent across templates and with
+// any other direct sendEmail() caller that wants the same look (e.g. systemServiceReminder.service.ts).
 
 const TEMPLATES: TemplateSeed[] = [
   {

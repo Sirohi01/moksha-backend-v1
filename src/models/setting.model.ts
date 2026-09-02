@@ -46,6 +46,11 @@ export interface ISetting extends Document {
     quietHoursStart?: string;
     quietHoursEnd?: string;
   };
+  systemAlerts?: {
+    popupReminderDays: number;
+    emailReminderDays: number;
+    notifyEmails: string[];
+  };
   banners: { image: string; link?: string; title?: string }[];
   socialLinks: { platform: string; url: string }[];
   advancedSeo?: {
@@ -203,6 +208,11 @@ const settingSchema = new Schema<ISetting>(
       quietHoursStart: { type: String, trim: true },
       quietHoursEnd: { type: String, trim: true },
     },
+    systemAlerts: {
+      popupReminderDays: { type: Number, default: 15, min: 0 },
+      emailReminderDays: { type: Number, default: 15, min: 0 },
+      notifyEmails: { type: [String], default: [] },
+    },
     banners: {
       type: [
         {
@@ -254,29 +264,29 @@ const settingSchema = new Schema<ISetting>(
             lowerTitle: { type: String, trim: true },
             lowerDescription: { type: String, trim: true },
             bottomStatement: { type: String, trim: true },
-                        secondaryTitle: { type: String, trim: true },
-                        secondaryDescription: { type: String, trim: true },
-                        supportTitle: { type: String, trim: true },
-                        supportDescription: { type: String, trim: true },
-                        regionTitle: { type: String, trim: true },
-                        regionDescription: { type: String, trim: true },
-                        phoneLabel: { type: String, trim: true },
-                        phoneNumber: { type: String, trim: true },
-                        contactEmail: { type: String, trim: true },
-                        contactAddress: { type: String, trim: true },
-                        availabilityText: { type: String, trim: true },
-                        actionTitle: { type: String, trim: true },
-                        requestTitle: { type: String, trim: true },
-                        requestDescription: { type: String, trim: true },
-                        inputPlaceholder: { type: String, trim: true },
-                        submitLabel: { type: String, trim: true },
-                        submittedLabel: { type: String, trim: true },
-                        successMessage: { type: String, trim: true },
-                        initiativeLabel: { type: String, trim: true },
-                        quickLinksTitle: { type: String, trim: true },
-                        servicesTitle: { type: String, trim: true },
-                        initiativesTitle: { type: String, trim: true },
-                        contactTitle: { type: String, trim: true },
+            secondaryTitle: { type: String, trim: true },
+            secondaryDescription: { type: String, trim: true },
+            supportTitle: { type: String, trim: true },
+            supportDescription: { type: String, trim: true },
+            regionTitle: { type: String, trim: true },
+            regionDescription: { type: String, trim: true },
+            phoneLabel: { type: String, trim: true },
+            phoneNumber: { type: String, trim: true },
+            contactEmail: { type: String, trim: true },
+            contactAddress: { type: String, trim: true },
+            availabilityText: { type: String, trim: true },
+            actionTitle: { type: String, trim: true },
+            requestTitle: { type: String, trim: true },
+            requestDescription: { type: String, trim: true },
+            inputPlaceholder: { type: String, trim: true },
+            submitLabel: { type: String, trim: true },
+            submittedLabel: { type: String, trim: true },
+            successMessage: { type: String, trim: true },
+            initiativeLabel: { type: String, trim: true },
+            quickLinksTitle: { type: String, trim: true },
+            servicesTitle: { type: String, trim: true },
+            initiativesTitle: { type: String, trim: true },
+            contactTitle: { type: String, trim: true },
             buttonLabel: { type: String, trim: true },
             buttonHref: { type: String, trim: true },
             secondaryButtonLabel: { type: String, trim: true },

@@ -25,6 +25,7 @@ import adminNotificationRoutes from "../modules/adminNotification/adminNotificat
 
 import redirectRoutes from "../modules/redirect/redirect.routes";
 import dashboardRoutes from "../modules/dashboard/dashboard.routes";
+import externalServiceRoutes from "../modules/externalService/externalService.routes";
 
 const router = Router();
 
@@ -53,5 +54,6 @@ router.use("/newsletter", newsletterRoutes);
 router.use("/notifications", adminNotificationRoutes);
 router.use("/redirects", redirectRoutes);
 router.use("/dashboard", dashboardRoutes);
+router.use("/system-services", externalServiceRoutes);
 
 export default router;

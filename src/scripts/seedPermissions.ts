@@ -75,6 +75,9 @@ const PERMISSIONS: PermissionSeed[] = [
   { module: "settings", action: "read", label: "View settings" },
   { module: "settings", action: "update", label: "Manage settings" },
 
+  { module: "systemServices", action: "read", label: "View external services & expiry" },
+  { module: "systemServices", action: "update", label: "Manage external services & expiry" },
+
   { module: "audit", action: "read", label: "View audit logs" },
 
   { module: "enquiries", action: "read", label: "View contact enquiries" },

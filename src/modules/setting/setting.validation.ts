@@ -127,6 +127,13 @@ export const updateSettingSchema = z.object({
         quietHoursEnd: timeOfDaySchema.optional(),
       })
       .optional(),
+    systemAlerts: z
+      .object({
+        popupReminderDays: z.number().min(0).optional(),
+        emailReminderDays: z.number().min(0).optional(),
+        notifyEmails: z.array(z.string().trim().email()).optional(),
+      })
+      .optional(),
     banners: z
       .array(
         z.object({
