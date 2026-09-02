@@ -69,5 +69,6 @@ const caseSchema = new Schema<ICase>(
 );
 
 caseSchema.index({ status: 1, priority: -1, createdAt: 1 });
+caseSchema.index({ status: 1, updatedAt: 1 });
 
 export const Case = model<ICase>("Case", caseSchema);
