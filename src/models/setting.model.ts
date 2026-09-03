@@ -129,6 +129,7 @@ export interface ISetting extends Document {
         variant?: string;
       }[];
       items?: {
+        icon?: string;
         title?: string;
         label?: string;
         value?: string;
@@ -323,6 +324,7 @@ const settingSchema = new Schema<ISetting>(
                   value: { type: String, trim: true },
                   description: { type: String, trim: true },
                   image: { type: String, trim: true },
+                  icon: { type: String, trim: true },
                   href: { type: String, trim: true },
                   features: { type: [String], default: [] },
                 },
@@ -414,6 +416,7 @@ const settingSchema = new Schema<ISetting>(
                   value: { type: String, trim: true },
                   description: { type: String, trim: true },
                   image: { type: String, trim: true },
+                  icon: { type: String, trim: true },
                   href: { type: String, trim: true },
                   features: { type: [String], default: [] },
                 },
