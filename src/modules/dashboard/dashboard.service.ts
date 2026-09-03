@@ -219,32 +219,106 @@ async function fetchSearchConsole(token: string | null) {
 
 type PageSpeedData = {
   strategy: "mobile" | "desktop";
+  lighthouseAvailable: boolean;
   performanceScore: number;
   seoScore: number;
   lcp: number | null;
   inp: number | null;
   cls: number | null;
   fcp: number | null;
+  ttfb: number | null;
   tbt: number | null;
+  seoChecks: Array<{
+    key: string;
+    label: string;
+    status: "good" | "needs_work" | "not_checked";
+    score: number | null;
+  }>;
 };
 
 const PAGE_SPEED_CACHE_MS = 6 * 60 * 60 * 1000;
 const PAGE_SPEED_RETRY_MS = 60 * 1000;
 let pageSpeedCache: SourceResult<PageSpeedData> | null = null;
 let pageSpeedRefresh: Promise<void> | null = null;
+let homepageSeoRefresh: Promise<void> | null = null;
 let pageSpeedLastAttempt = 0;
+
+function buildHomepageSeoData(homepageHtml: string): PageSpeedData {
+  const htmlCheck = (key: string, label: string, passed: boolean) => ({
+    key,
+    label,
+    status: passed ? "good" as const : "needs_work" as const,
+    score: passed ? 100 : 0,
+  });
+  const title = homepageHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/<[^>]+>/g, "").trim() ?? "";
+  const description = homepageHtml.match(/<meta\s+[^>]*name=["']description["'][^>]*content=["']([^"']*)["'][^>]*>/i)?.[1]?.trim()
+    ?? homepageHtml.match(/<meta\s+[^>]*content=["']([^"']*)["'][^>]*name=["']description["'][^>]*>/i)?.[1]?.trim()
+    ?? "";
+  const headings = [...homepageHtml.matchAll(/<h([1-6])\b[^>]*>/gi)].map((match) => Number(match[1]));
+  const images = [...homepageHtml.matchAll(/<img\b[^>]*>/gi)].map((match) => match[0]);
+  const origin = new URL(env.WEBSITE_URL).origin;
+  const internalLinks = [...homepageHtml.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>/gi)]
+    .map((match) => match[1]).filter((href) => href.startsWith("/") || href.startsWith(origin));
+  const visibleTextLength = homepageHtml.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().length;
+  const seoChecks: PageSpeedData["seoChecks"] = [
+    htmlCheck("meta-title", "Meta Title", title.length >= 10 && title.length <= 60),
+    htmlCheck("meta-description", "Meta Description", description.length >= 50 && description.length <= 160),
+    htmlCheck("headings", "Headings", headings[0] === 1 && headings.filter((level) => level === 1).length === 1),
+    htmlCheck("content-quality", "Content Quality", visibleTextLength >= 300),
+    htmlCheck("internal-linking", "Internal Linking", internalLinks.length >= 3),
+    htmlCheck("image-alt", "Images (ALT Text)", images.length === 0 || images.every((image) => /\balt=["'][^"']+["']/i.test(image))),
+    htmlCheck("schema-markup", "Schema Markup", /<script\b[^>]*type=["']application\/ld\+json["'][^>]*>/i.test(homepageHtml)),
+    htmlCheck("mobile-friendly", "Mobile Friendliness", /<meta\s+[^>]*name=["']viewport["'][^>]*>/i.test(homepageHtml)),
+    { key: "page-speed", label: "Page Speed", status: "not_checked", score: null },
+  ];
+  const checked = seoChecks.slice(0, -1);
+  const seoScore = Math.round(checked.filter((item) => item.status === "good").length / checked.length * 100);
+  return {
+    strategy: "desktop",
+    lighthouseAvailable: false,
+    performanceScore: 0,
+    seoScore,
+    lcp: null,
+    inp: null,
+    cls: null,
+    fcp: null,
+    ttfb: null,
+    tbt: null,
+    seoChecks,
+  };
+}
+
+async function fetchHomepageSeo(): Promise<SourceResult<PageSpeedData>> {
+  try {
+    const response = await fetch(env.WEBSITE_URL, {
+      headers: { "user-agent": "MokshaSewa-SEO-Monitor/1.0" },
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!response.ok) throw new Error(`Homepage returned ${response.status}`);
+    return source("connected", buildHomepageSeoData(await response.text()), "Homepage SEO loaded; performance metrics are updating.");
+  } catch (error) {
+    return source<PageSpeedData>("error", null, error instanceof Error ? error.message : "Homepage SEO request failed");
+  }
+}
 
 async function fetchPageSpeed(): Promise<SourceResult<PageSpeedData>> {
   if (!env.PAGESPEED_API_KEY) return source<PageSpeedData>("not_connected", null, "Add PAGESPEED_API_KEY");
   try {
+    const homepageHtmlPromise = fetch(env.WEBSITE_URL, {
+      headers: { "user-agent": "MokshaSewa-SEO-Monitor/1.0" },
+      signal: AbortSignal.timeout(15_000),
+    }).then(async (response) => response.ok ? response.text() : null).catch(() => null);
     let body: any = null;
-    let usedStrategy: "mobile" | "desktop" = "mobile";
+    let usedStrategy: "mobile" | "desktop" = "desktop";
     let lastError = "PageSpeed request failed";
-    for (const strategy of ["mobile", "desktop"] as const) {
+    // Desktop is intentionally first: it is usually faster and gives the dashboard useful live
+    // data without making the user wait for Google's slower mobile Lighthouse queue.
+    for (const strategy of ["desktop", "mobile"] as const) {
       const params = new URLSearchParams({ url: env.WEBSITE_URL, key: env.PAGESPEED_API_KEY, strategy });
       ["performance", "seo"].forEach((category) => params.append("category", category));
       const response = await fetch(`https://pagespeedonline.googleapis.com/pagespeedonline/v5/runPagespeed?${params}`, {
-        signal: AbortSignal.timeout(75_000),
+        signal: AbortSignal.timeout(strategy === "desktop" ? 90_000 : 60_000),
       });
       const responseBody = await response.json().catch(() => null) as any;
       if (response.ok) {
@@ -255,21 +329,80 @@ async function fetchPageSpeed(): Promise<SourceResult<PageSpeedData>> {
       lastError = responseBody?.error?.message ?? `PageSpeed returned ${response.status}`;
       if (response.status < 500) break;
     }
-    if (!body) throw new Error(lastError);
-    const audits = body.lighthouseResult?.audits ?? {};
-    const field = body.loadingExperience?.metrics ?? body.originLoadingExperience?.metrics ?? {};
+    // Google occasionally returns PROTOCOL_TIMEOUT even though the homepage itself is
+    // healthy. Keep the fast, direct homepage SEO audit usable and retry Lighthouse later.
+    const audits = body?.lighthouseResult?.audits ?? {};
+    const field = body?.loadingExperience?.metrics ?? body?.originLoadingExperience?.metrics ?? {};
     const fieldValue = (key: string) => field[key]?.percentile ?? null;
     const fieldCls = fieldValue("CUMULATIVE_LAYOUT_SHIFT_SCORE");
+    const homepageHtml = await homepageHtmlPromise;
+    const check = (key: string, label: string, auditIds: string[]) => {
+      const scores = auditIds
+        .map((id) => audits[id]?.score)
+        .filter((score: unknown): score is number => typeof score === "number");
+      const score = scores.length ? Math.min(...scores) : null;
+      return {
+        key,
+        label,
+        status: score == null ? "not_checked" as const : score >= 0.9 ? "good" as const : "needs_work" as const,
+        score: score == null ? null : Math.round(score * 100),
+      };
+    };
+    const lighthouseAvailable = Boolean(body?.lighthouseResult);
+    const performanceScore = lighthouseAvailable
+      ? Math.round((body.lighthouseResult?.categories?.performance?.score ?? 0) * 100)
+      : 0;
+    const htmlCheck = (key: string, label: string, passed: boolean | null) => ({
+      key,
+      label,
+      status: passed == null ? "not_checked" as const : passed ? "good" as const : "needs_work" as const,
+      score: passed == null ? null : passed ? 100 : 0,
+    });
+    const title = homepageHtml?.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/<[^>]+>/g, "").trim() ?? "";
+    const description = homepageHtml?.match(/<meta\s+[^>]*name=["']description["'][^>]*content=["']([^"']*)["'][^>]*>/i)?.[1]?.trim()
+      ?? homepageHtml?.match(/<meta\s+[^>]*content=["']([^"']*)["'][^>]*name=["']description["'][^>]*>/i)?.[1]?.trim()
+      ?? "";
+    const headings = homepageHtml ? [...homepageHtml.matchAll(/<h([1-6])\b[^>]*>/gi)].map((match) => Number(match[1])) : [];
+    const images = homepageHtml ? [...homepageHtml.matchAll(/<img\b[^>]*>/gi)].map((match) => match[0]) : [];
+    const internalLinks = homepageHtml ? [...homepageHtml.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>/gi)]
+      .map((match) => match[1]).filter((href) => href.startsWith("/") || href.startsWith(new URL(env.WEBSITE_URL).origin)) : [];
+    const visibleTextLength = homepageHtml?.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().length ?? 0;
+    const seoChecks: PageSpeedData["seoChecks"] = [
+      homepageHtml ? htmlCheck("meta-title", "Meta Title", title.length >= 10 && title.length <= 60) : check("meta-title", "Meta Title", ["document-title"]),
+      homepageHtml ? htmlCheck("meta-description", "Meta Description", description.length >= 50 && description.length <= 160) : check("meta-description", "Meta Description", ["meta-description"]),
+      htmlCheck("headings", "Headings", homepageHtml ? headings[0] === 1 && headings.filter((level) => level === 1).length === 1 : null),
+      htmlCheck("content-quality", "Content Quality", homepageHtml ? visibleTextLength >= 300 : null),
+      homepageHtml ? htmlCheck("internal-linking", "Internal Linking", internalLinks.length >= 3) : check("internal-linking", "Internal Linking", ["crawlable-anchors", "link-text"]),
+      htmlCheck("image-alt", "Images (ALT Text)", homepageHtml ? images.length === 0 || images.every((image) => /\balt=["'][^"']+["']/i.test(image)) : null),
+      htmlCheck("schema-markup", "Schema Markup", homepageHtml ? /<script\b[^>]*type=["']application\/ld\+json["'][^>]*>/i.test(homepageHtml) : null),
+      homepageHtml ? htmlCheck("mobile-friendly", "Mobile Friendliness", /<meta\s+[^>]*name=["']viewport["'][^>]*>/i.test(homepageHtml)) : check("mobile-friendly", "Mobile Friendliness", ["viewport"]),
+      {
+        key: "page-speed",
+        label: "Page Speed",
+        status: lighthouseAvailable ? (performanceScore >= 90 ? "good" : "needs_work") : "not_checked",
+        score: lighthouseAvailable ? performanceScore : null,
+      },
+    ];
+    const checkedSeoItems = seoChecks.slice(0, -1).filter((item) => item.status !== "not_checked");
+    const directSeoScore = checkedSeoItems.length
+      ? Math.round(checkedSeoItems.filter((item) => item.status === "good").length / checkedSeoItems.length * 100)
+      : 0;
     return source("connected", {
       strategy: usedStrategy,
-      performanceScore: Math.round((body.lighthouseResult?.categories?.performance?.score ?? 0) * 100),
-      seoScore: Math.round((body.lighthouseResult?.categories?.seo?.score ?? 0) * 100),
+      lighthouseAvailable,
+      performanceScore,
+      seoScore: lighthouseAvailable
+        ? Math.round((body.lighthouseResult?.categories?.seo?.score ?? 0) * 100)
+        : directSeoScore,
       lcp: fieldValue("LARGEST_CONTENTFUL_PAINT_MS") ?? audits["largest-contentful-paint"]?.numericValue ?? null,
       inp: fieldValue("INTERACTION_TO_NEXT_PAINT") ?? audits["interaction-to-next-paint"]?.numericValue ?? null,
       cls: fieldCls != null ? (fieldCls > 1 ? fieldCls / 100 : fieldCls) : audits["cumulative-layout-shift"]?.numericValue ?? null,
       fcp: fieldValue("FIRST_CONTENTFUL_PAINT_MS") ?? audits["first-contentful-paint"]?.numericValue ?? null,
+      ttfb: audits["server-response-time"]?.numericValue ?? null,
       tbt: audits["total-blocking-time"]?.numericValue ?? null,
-    });
+      seoChecks,
+    }, lighthouseAvailable ? undefined : `Homepage SEO is live. Lighthouse retry pending: ${lastError}`);
   } catch (error) {
     return source<PageSpeedData>("error", null, error instanceof Error ? error.message : "PageSpeed request failed");
   }
@@ -278,7 +411,15 @@ async function fetchPageSpeed(): Promise<SourceResult<PageSpeedData>> {
 export function getPageSpeedSnapshot(): SourceResult<PageSpeedData> {
   const now = Date.now();
   const cacheAge = pageSpeedCache ? now - new Date(pageSpeedCache.updatedAt).getTime() : Infinity;
-  const cacheIsFresh = pageSpeedCache?.status === "connected" && cacheAge < PAGE_SPEED_CACHE_MS;
+  const cacheIsFresh = pageSpeedCache?.status === "connected" && pageSpeedCache.data?.lighthouseAvailable === true && cacheAge < PAGE_SPEED_CACHE_MS;
+
+  if (!pageSpeedCache && !homepageSeoRefresh) {
+    homepageSeoRefresh = fetchHomepageSeo()
+      .then((result) => {
+        if (result.status === "connected" && !pageSpeedCache?.data?.lighthouseAvailable) pageSpeedCache = result;
+      })
+      .finally(() => { homepageSeoRefresh = null; });
+  }
 
   if (!cacheIsFresh && !pageSpeedRefresh && now - pageSpeedLastAttempt >= PAGE_SPEED_RETRY_MS) {
     pageSpeedLastAttempt = now;
@@ -288,10 +429,17 @@ export function getPageSpeedSnapshot(): SourceResult<PageSpeedData> {
   }
 
   if (pageSpeedCache?.status === "connected") return pageSpeedCache;
-  if (pageSpeedRefresh) {
-    return source<PageSpeedData>("error", null, "Generating mobile PageSpeed report; desktop fallback will run automatically if needed.");
+  if (homepageSeoRefresh || pageSpeedRefresh) {
+    return source<PageSpeedData>("error", null, "Loading SEO data...");
   }
   return pageSpeedCache ?? source<PageSpeedData>("error", null, "PageSpeed report is temporarily unavailable. Retrying shortly.");
+}
+
+export async function getPageSpeedReadySnapshot(): Promise<SourceResult<PageSpeedData>> {
+  const snapshot = getPageSpeedSnapshot();
+  if (snapshot.data || !homepageSeoRefresh) return snapshot;
+  await homepageSeoRefresh;
+  return pageSpeedCache ?? snapshot;
 }
 
 type IndexCoverageData = {
@@ -340,12 +488,10 @@ async function refreshIndexCoverage(): Promise<SourceResult<IndexCoverageData>> 
     if (!urls.length) throw new Error("No URLs were found in sitemap.xml");
     const inspected: IndexCoverageData["urls"] = [];
 
-    for (let index = 0; index < urls.length; index += 4) {
-      const batch = urls.slice(index, index + 4);
-      const results = await Promise.all(batch.map(async (url) => {
+    const results = await Promise.allSettled(urls.map(async (url) => {
         const response = await fetch("https://searchconsole.googleapis.com/v1/urlInspection/index:inspect", {
           method: "POST",
-          signal: AbortSignal.timeout(20_000),
+          signal: AbortSignal.timeout(12_000),
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
           body: JSON.stringify({ inspectionUrl: url, siteUrl: env.SEARCH_CONSOLE_SITE_URL }),
         });
@@ -353,9 +499,11 @@ async function refreshIndexCoverage(): Promise<SourceResult<IndexCoverageData>> 
         const body = await response.json() as any;
         const status = body.inspectionResult?.indexStatusResult;
         return { url, indexed: status?.verdict === "PASS", coverageState: status?.coverageState as string | undefined };
-      }));
-      inspected.push(...results);
+    }));
+    for (const result of results) {
+      if (result.status === "fulfilled") inspected.push(result.value);
     }
+    if (!inspected.length) throw new Error("Google did not return URL inspection data");
 
     const indexed = inspected.filter((item) => item.indexed).length;
     return source("connected", { indexed, total: inspected.length, notIndexed: inspected.length - indexed, urls: inspected });
