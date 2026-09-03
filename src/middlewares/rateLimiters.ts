@@ -32,6 +32,15 @@ export const otpVerifyLimiter = rateLimit({
   message: { success: false, message: "Too many attempts. Please request a new OTP and try again later." },
 });
 
+/** Sensitive vault step-up: deliberately strict because every attempt contains privileged TOTPs. */
+export const systemServiceAccessLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "Too many access attempts. Try again in 15 minutes." },
+});
+
 /** Covers forgot-password and account registration — both are prone to enumeration/spam abuse
  * from a single source, but a genuine user rarely needs more than a couple of tries. */
 export const authWriteLimiter = rateLimit({
