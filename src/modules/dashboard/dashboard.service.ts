@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import tls from "node:tls";
+import { lookup } from "node:dns/promises";
 import { BlogPost } from "../../models/blogPost.model";
 import { Enquiry } from "../../models/enquiry.model";
 import { AssistanceRequest } from "../../models/assistanceRequest.model";
@@ -81,10 +83,31 @@ async function fetchGa4(token: string | null) {
       const body = await response.json() as { rows?: Array<{ metricValues?: Array<{ value?: string }> }> };
       return body.rows?.[0]?.metricValues?.map((item) => Number(item.value ?? 0)) ?? [];
     };
-    const [values, previous] = await Promise.all([
+    const [values, previous, dailyResponse] = await Promise.all([
       run("30daysAgo", "today"),
       run("60daysAgo", "31daysAgo"),
+      fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${env.GA4_PROPERTY_ID}:runReport`, {
+        method: "POST",
+        signal: AbortSignal.timeout(20_000),
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dateRanges: [{ startDate: "30daysAgo", endDate: "today" }],
+          dimensions: [{ name: "date" }],
+          metrics: [{ name: "activeUsers" }, { name: "screenPageViews" }],
+          orderBys: [{ dimension: { dimensionName: "date" } }],
+          limit: 31,
+        }),
+      }),
     ]);
+    if (!dailyResponse.ok) throw new Error(`GA4 daily report returned ${dailyResponse.status}`);
+    const dailyBody = await dailyResponse.json() as {
+      rows?: Array<{ dimensionValues?: Array<{ value?: string }>; metricValues?: Array<{ value?: string }> }>;
+    };
+    const daily = (dailyBody.rows ?? []).map((row) => ({
+      date: row.dimensionValues?.[0]?.value ?? "",
+      users: Number(row.metricValues?.[0]?.value ?? 0),
+      pageViews: Number(row.metricValues?.[1]?.value ?? 0),
+    }));
     const pagesResponse = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${env.GA4_PROPERTY_ID}:runReport`, {
       method: "POST",
       signal: AbortSignal.timeout(20_000),
@@ -112,6 +135,7 @@ async function fetchGa4(token: string | null) {
       users: values[0] ?? 0, sessions: values[1] ?? 0, pageViews: values[2] ?? 0,
       averageSessionSeconds: values[3] ?? 0, bounceRate: (values[4] ?? 0) * 100,
       conversions: values[5] ?? 0,
+      daily,
       pages,
       growth: {
         users: growth(values[0] ?? 0, previous[0] ?? 0),
@@ -153,7 +177,19 @@ async function fetchSearchConsole(token: string | null) {
       const body = await response.json() as { rows?: Array<{ clicks?: number; impressions?: number; ctr?: number; position?: number }> };
       return body.rows?.[0];
     };
-    const [row, previous] = await Promise.all([run(start, end), run(previousStart, previousEnd)]);
+    const [row, previous, queryResponse] = await Promise.all([
+      run(start, end),
+      run(previousStart, previousEnd),
+      fetch(`https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`, {
+        method: "POST",
+        signal: AbortSignal.timeout(20_000),
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ startDate: date(start), endDate: date(end), type: "web", dimensions: ["query"], rowLimit: 5 }),
+      }),
+    ]);
+    const queryBody = queryResponse.ok
+      ? await queryResponse.json() as { rows?: Array<{ keys?: string[]; clicks?: number; impressions?: number; ctr?: number; position?: number }> }
+      : { rows: [] };
     return source("connected", {
       clicks: row?.clicks ?? 0, impressions: row?.impressions ?? 0,
       ctr: (row?.ctr ?? 0) * 100, position: row?.position ?? 0,
@@ -163,35 +199,261 @@ async function fetchSearchConsole(token: string | null) {
         ctr: growth(row?.ctr ?? 0, previous?.ctr ?? 0),
         position: growth(row?.position ?? 0, previous?.position ?? 0),
       },
+      queries: (queryBody.rows ?? []).map((item) => ({
+        query: item.keys?.[0] ?? "Unknown",
+        clicks: item.clicks ?? 0,
+        impressions: item.impressions ?? 0,
+        ctr: (item.ctr ?? 0) * 100,
+        position: item.position ?? 0,
+      })),
     });
   } catch (error) {
     return source("error", null, error instanceof Error ? error.message : "Search Console request failed");
   }
 }
 
-async function fetchPageSpeed() {
-  if (!env.PAGESPEED_API_KEY) return source("not_connected", null, "Add PAGESPEED_API_KEY");
+type PageSpeedData = {
+  strategy: "mobile" | "desktop";
+  performanceScore: number;
+  seoScore: number;
+  lcp: number | null;
+  inp: number | null;
+  cls: number | null;
+  fcp: number | null;
+  tbt: number | null;
+};
+
+const PAGE_SPEED_CACHE_MS = 6 * 60 * 60 * 1000;
+const PAGE_SPEED_RETRY_MS = 60 * 1000;
+let pageSpeedCache: SourceResult<PageSpeedData> | null = null;
+let pageSpeedRefresh: Promise<void> | null = null;
+let pageSpeedLastAttempt = 0;
+
+async function fetchPageSpeed(): Promise<SourceResult<PageSpeedData>> {
+  if (!env.PAGESPEED_API_KEY) return source<PageSpeedData>("not_connected", null, "Add PAGESPEED_API_KEY");
   try {
-    const params = new URLSearchParams({ url: env.WEBSITE_URL, key: env.PAGESPEED_API_KEY, strategy: "mobile" });
-    ["performance", "seo"].forEach((category) => params.append("category", category));
-    const response = await fetch(`https://pagespeedonline.googleapis.com/pagespeedonline/v5/runPagespeed?${params}`, {
-      signal: AbortSignal.timeout(45_000),
-    });
-    if (!response.ok) throw new Error(`PageSpeed returned ${response.status}`);
-    const body = await response.json() as any;
+    let body: any = null;
+    let usedStrategy: "mobile" | "desktop" = "mobile";
+    let lastError = "PageSpeed request failed";
+    for (const strategy of ["mobile", "desktop"] as const) {
+      const params = new URLSearchParams({ url: env.WEBSITE_URL, key: env.PAGESPEED_API_KEY, strategy });
+      ["performance", "seo"].forEach((category) => params.append("category", category));
+      const response = await fetch(`https://pagespeedonline.googleapis.com/pagespeedonline/v5/runPagespeed?${params}`, {
+        signal: AbortSignal.timeout(75_000),
+      });
+      const responseBody = await response.json().catch(() => null) as any;
+      if (response.ok) {
+        body = responseBody;
+        usedStrategy = strategy;
+        break;
+      }
+      lastError = responseBody?.error?.message ?? `PageSpeed returned ${response.status}`;
+      if (response.status < 500) break;
+    }
+    if (!body) throw new Error(lastError);
     const audits = body.lighthouseResult?.audits ?? {};
+    const field = body.loadingExperience?.metrics ?? body.originLoadingExperience?.metrics ?? {};
+    const fieldValue = (key: string) => field[key]?.percentile ?? null;
+    const fieldCls = fieldValue("CUMULATIVE_LAYOUT_SHIFT_SCORE");
     return source("connected", {
+      strategy: usedStrategy,
       performanceScore: Math.round((body.lighthouseResult?.categories?.performance?.score ?? 0) * 100),
       seoScore: Math.round((body.lighthouseResult?.categories?.seo?.score ?? 0) * 100),
-      lcp: audits["largest-contentful-paint"]?.numericValue ?? null,
-      inp: audits["interaction-to-next-paint"]?.numericValue ?? null,
-      cls: audits["cumulative-layout-shift"]?.numericValue ?? null,
-      fcp: audits["first-contentful-paint"]?.numericValue ?? null,
+      lcp: fieldValue("LARGEST_CONTENTFUL_PAINT_MS") ?? audits["largest-contentful-paint"]?.numericValue ?? null,
+      inp: fieldValue("INTERACTION_TO_NEXT_PAINT") ?? audits["interaction-to-next-paint"]?.numericValue ?? null,
+      cls: fieldCls != null ? (fieldCls > 1 ? fieldCls / 100 : fieldCls) : audits["cumulative-layout-shift"]?.numericValue ?? null,
+      fcp: fieldValue("FIRST_CONTENTFUL_PAINT_MS") ?? audits["first-contentful-paint"]?.numericValue ?? null,
       tbt: audits["total-blocking-time"]?.numericValue ?? null,
     });
   } catch (error) {
-    return source("error", null, error instanceof Error ? error.message : "PageSpeed request failed");
+    return source<PageSpeedData>("error", null, error instanceof Error ? error.message : "PageSpeed request failed");
   }
+}
+
+export function getPageSpeedSnapshot(): SourceResult<PageSpeedData> {
+  const now = Date.now();
+  const cacheAge = pageSpeedCache ? now - new Date(pageSpeedCache.updatedAt).getTime() : Infinity;
+  const cacheIsFresh = pageSpeedCache?.status === "connected" && cacheAge < PAGE_SPEED_CACHE_MS;
+
+  if (!cacheIsFresh && !pageSpeedRefresh && now - pageSpeedLastAttempt >= PAGE_SPEED_RETRY_MS) {
+    pageSpeedLastAttempt = now;
+    pageSpeedRefresh = fetchPageSpeed()
+      .then((result) => { pageSpeedCache = result; })
+      .finally(() => { pageSpeedRefresh = null; });
+  }
+
+  if (pageSpeedCache?.status === "connected") return pageSpeedCache;
+  if (pageSpeedRefresh) {
+    return source<PageSpeedData>("error", null, "Generating mobile PageSpeed report; desktop fallback will run automatically if needed.");
+  }
+  return pageSpeedCache ?? source<PageSpeedData>("error", null, "PageSpeed report is temporarily unavailable. Retrying shortly.");
+}
+
+type IndexCoverageData = {
+  indexed: number;
+  total: number;
+  notIndexed: number;
+  urls: Array<{ url: string; indexed: boolean; coverageState?: string }>;
+};
+
+const INDEX_COVERAGE_CACHE_MS = 12 * 60 * 60 * 1000;
+const INDEX_COVERAGE_RETRY_MS = 5 * 60 * 1000;
+let indexCoverageCache: SourceResult<IndexCoverageData> | null = null;
+let indexCoverageRefresh: Promise<void> | null = null;
+let indexCoverageLastAttempt = 0;
+
+function xmlLocations(xml: string): string[] {
+  return [...xml.matchAll(/<loc>\s*([^<]+?)\s*<\/loc>/gi)].map((match) =>
+    match[1].replaceAll("&amp;", "&").replaceAll("&lt;", "<").replaceAll("&gt;", ">"),
+  );
+}
+
+async function fetchSitemapUrls(): Promise<string[]> {
+  const origin = new URL(env.WEBSITE_URL).origin;
+  const sitemapUrl = new URL("/sitemap.xml", origin).toString();
+  const response = await fetch(sitemapUrl, { signal: AbortSignal.timeout(20_000) });
+  if (!response.ok) throw new Error(`Sitemap returned ${response.status}`);
+  const locations = xmlLocations(await response.text());
+  const childSitemaps = locations.filter((url) => /\.xml(?:\?|$)/i.test(url));
+  if (!childSitemaps.length) return [...new Set(locations)].slice(0, 500);
+
+  const nested = await Promise.all(childSitemaps.slice(0, 20).map(async (url) => {
+    const child = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+    return child.ok ? xmlLocations(await child.text()) : [];
+  }));
+  return [...new Set(nested.flat().filter((url) => !/\.xml(?:\?|$)/i.test(url)))].slice(0, 500);
+}
+
+async function refreshIndexCoverage(): Promise<SourceResult<IndexCoverageData>> {
+  if (!env.SEARCH_CONSOLE_SITE_URL) {
+    return source<IndexCoverageData>("not_connected", null, "Add SEARCH_CONSOLE_SITE_URL");
+  }
+  try {
+    const token = await getGoogleAccessToken();
+    if (!token) return source<IndexCoverageData>("not_connected", null, "Add Google service-account credentials");
+    const urls = await fetchSitemapUrls();
+    if (!urls.length) throw new Error("No URLs were found in sitemap.xml");
+    const inspected: IndexCoverageData["urls"] = [];
+
+    for (let index = 0; index < urls.length; index += 4) {
+      const batch = urls.slice(index, index + 4);
+      const results = await Promise.all(batch.map(async (url) => {
+        const response = await fetch("https://searchconsole.googleapis.com/v1/urlInspection/index:inspect", {
+          method: "POST",
+          signal: AbortSignal.timeout(20_000),
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ inspectionUrl: url, siteUrl: env.SEARCH_CONSOLE_SITE_URL }),
+        });
+        if (!response.ok) throw new Error(`URL Inspection returned ${response.status}`);
+        const body = await response.json() as any;
+        const status = body.inspectionResult?.indexStatusResult;
+        return { url, indexed: status?.verdict === "PASS", coverageState: status?.coverageState as string | undefined };
+      }));
+      inspected.push(...results);
+    }
+
+    const indexed = inspected.filter((item) => item.indexed).length;
+    return source("connected", { indexed, total: inspected.length, notIndexed: inspected.length - indexed, urls: inspected });
+  } catch (error) {
+    return source<IndexCoverageData>("error", null, error instanceof Error ? error.message : "Index coverage request failed");
+  }
+}
+
+export function getIndexCoverageSnapshot(): SourceResult<IndexCoverageData> {
+  const now = Date.now();
+  const cacheAge = indexCoverageCache ? now - new Date(indexCoverageCache.updatedAt).getTime() : Infinity;
+  const cacheIsFresh = indexCoverageCache?.status === "connected" && cacheAge < INDEX_COVERAGE_CACHE_MS;
+  if (!cacheIsFresh && !indexCoverageRefresh && now - indexCoverageLastAttempt >= INDEX_COVERAGE_RETRY_MS) {
+    indexCoverageLastAttempt = now;
+    indexCoverageRefresh = refreshIndexCoverage()
+      .then((result) => { indexCoverageCache = result; })
+      .finally(() => { indexCoverageRefresh = null; });
+  }
+  if (indexCoverageCache?.status === "connected") return indexCoverageCache;
+  if (indexCoverageRefresh) return source<IndexCoverageData>("error", null, "Checking sitemap URLs in Google Search Console.");
+  return indexCoverageCache ?? source<IndexCoverageData>("error", null, "Index coverage is temporarily unavailable.");
+}
+
+type SiteStatusData = {
+  online: boolean;
+  responseTimeMs: number;
+  httpStatus: number;
+  sslValid: boolean;
+  sslExpiresAt: string | null;
+  sslIssuer: string | null;
+  certificateDaysRemaining: number | null;
+  finalUrl: string;
+  redirected: boolean;
+  ipAddress: string | null;
+  securityHeaders: { present: number; total: number };
+  nodeVersion: string;
+};
+
+let siteStatusCache: SourceResult<SiteStatusData> | null = null;
+let siteStatusRefresh: Promise<void> | null = null;
+
+async function inspectTls(url: URL): Promise<{ valid: boolean; expiresAt: string | null; issuer: string | null }> {
+  if (url.protocol !== "https:") return { valid: false, expiresAt: null, issuer: null };
+  return new Promise((resolve) => {
+    const socket = tls.connect({ host: url.hostname, port: Number(url.port || 443), servername: url.hostname, rejectUnauthorized: false });
+    const finish = (result: { valid: boolean; expiresAt: string | null; issuer: string | null }) => {
+      socket.destroy();
+      resolve(result);
+    };
+    socket.setTimeout(10_000, () => finish({ valid: false, expiresAt: null, issuer: null }));
+    socket.once("error", () => finish({ valid: false, expiresAt: null, issuer: null }));
+    socket.once("secureConnect", () => {
+      const certificate = socket.getPeerCertificate();
+      const expiresAt = certificate.valid_to ? new Date(certificate.valid_to).toISOString() : null;
+      finish({
+        valid: socket.authorized && expiresAt !== null && new Date(expiresAt).getTime() > Date.now(),
+        expiresAt,
+        issuer: (() => {
+          const value = certificate.issuer?.O ?? certificate.issuer?.CN;
+          return Array.isArray(value) ? value.join(", ") : value ?? null;
+        })(),
+      });
+    });
+  });
+}
+
+async function fetchSiteStatus(): Promise<SourceResult<SiteStatusData>> {
+  try {
+    const url = new URL(env.WEBSITE_URL);
+    const startedAt = Date.now();
+    const [response, certificate, dnsResult] = await Promise.all([
+      fetch(url, { method: "GET", redirect: "follow", signal: AbortSignal.timeout(12_000) }),
+      inspectTls(url),
+      lookup(url.hostname).catch(() => null),
+    ]);
+    const securityHeaderNames = ["strict-transport-security", "content-security-policy", "x-content-type-options", "x-frame-options", "referrer-policy"];
+    const present = securityHeaderNames.filter((header) => response.headers.has(header)).length;
+    return source("connected", {
+      online: response.ok,
+      responseTimeMs: Date.now() - startedAt,
+      httpStatus: response.status,
+      sslValid: certificate.valid,
+      sslExpiresAt: certificate.expiresAt,
+      sslIssuer: certificate.issuer,
+      certificateDaysRemaining: certificate.expiresAt ? Math.max(0, Math.ceil((new Date(certificate.expiresAt).getTime() - Date.now()) / 86_400_000)) : null,
+      finalUrl: response.url,
+      redirected: response.redirected,
+      ipAddress: dnsResult?.address ?? null,
+      securityHeaders: { present, total: securityHeaderNames.length },
+      nodeVersion: process.version,
+    });
+  } catch (error) {
+    return source<SiteStatusData>("error", null, error instanceof Error ? error.message : "Website health check failed");
+  }
+}
+
+export function getSiteStatusSnapshot(): SourceResult<SiteStatusData> {
+  const age = siteStatusCache ? Date.now() - new Date(siteStatusCache.updatedAt).getTime() : Infinity;
+  if ((!siteStatusCache || age >= 5 * 60 * 1000) && !siteStatusRefresh) {
+    siteStatusRefresh = fetchSiteStatus().then((result) => { siteStatusCache = result; }).finally(() => { siteStatusRefresh = null; });
+  }
+  if (siteStatusCache) return siteStatusCache;
+  return source<SiteStatusData>("error", null, "Checking website health.");
 }
 
 async function fetchInternalMetrics() {
@@ -225,8 +487,11 @@ async function fetchInternalMetrics() {
 export async function buildDashboardOverview() {
   let token: string | null = null;
   try { token = await getGoogleAccessToken(); } catch { token = null; }
-  const [internal, analytics, searchConsole, pageSpeed] = await Promise.all([
-    fetchInternalMetrics(), fetchGa4(token), fetchSearchConsole(token), fetchPageSpeed(),
+  const [internal, analytics, searchConsole] = await Promise.all([
+    fetchInternalMetrics(), fetchGa4(token), fetchSearchConsole(token),
   ]);
-  return { generatedAt: nowIso(), sources: { internal, analytics, searchConsole, pageSpeed } };
+  const pageSpeed = getPageSpeedSnapshot();
+  const indexCoverage = getIndexCoverageSnapshot();
+  const siteStatus = getSiteStatusSnapshot();
+  return { generatedAt: nowIso(), sources: { internal, analytics, searchConsole, pageSpeed, indexCoverage, siteStatus } };
 }
