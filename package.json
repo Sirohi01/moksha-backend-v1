@@ -16,6 +16,7 @@
     "seed:landing": "tsx src/scripts/seedLandingPage.ts",
     "seed": "tsx src/scripts/seedAll.ts",
     "seed:demo": "tsx src/scripts/seedDemoData.ts",
+    "seed:system-services": "tsx src/scripts/seedSystemServices.ts",
     "seed:demo:clean": "tsx src/scripts/deleteDemoData.ts",
     "geocode:backfill": "tsx src/scripts/backfillGeocoding.ts"
   },

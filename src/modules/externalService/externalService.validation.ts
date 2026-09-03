@@ -11,6 +11,7 @@ const receiptList = z
     })
   )
   .optional();
+const serviceDetails = z.record(z.string().max(80), z.string().trim().max(500)).optional();
 
 export const createExternalServiceSchema = z.object({
   body: z.object({
@@ -25,6 +26,7 @@ export const createExternalServiceSchema = z.object({
     expiryDate: z.coerce.date(),
     autoRenews: z.boolean().optional(),
     notes: z.string().trim().optional(),
+    details: serviceDetails,
     popupReminderDays: z.number().min(0).optional(),
     emailReminderDays: z.number().min(0).optional(),
     notifyEmails: emailList,
@@ -50,6 +52,7 @@ export const updateExternalServiceSchema = z.object({
     expiryDate: z.coerce.date().optional(),
     autoRenews: z.boolean().optional(),
     notes: z.string().trim().optional(),
+    details: serviceDetails,
     popupReminderDays: z.number().min(0).nullable().optional(),
     emailReminderDays: z.number().min(0).nullable().optional(),
     notifyEmails: emailList,

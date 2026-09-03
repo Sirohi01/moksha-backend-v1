@@ -42,6 +42,7 @@ export interface IExternalService extends Document {
   expiryDate: Date;
   autoRenews?: boolean;
   notes?: string;
+  details?: Record<string, string>;
   popupReminderDays?: number;
   emailReminderDays?: number;
   notifyEmails?: string[];
@@ -70,6 +71,7 @@ const externalServiceSchema = new Schema<IExternalService>(
     expiryDate: { type: Date, required: true, index: true },
     autoRenews: { type: Boolean, default: false },
     notes: { type: String, trim: true },
+    details: { type: Schema.Types.Mixed, default: {} },
     popupReminderDays: { type: Number, min: 0 },
     emailReminderDays: { type: Number, min: 0 },
     notifyEmails: { type: [String], default: [] },
