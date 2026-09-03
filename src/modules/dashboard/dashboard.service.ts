@@ -4,6 +4,11 @@ import { lookup } from "node:dns/promises";
 import { BlogPost } from "../../models/blogPost.model";
 import { Enquiry } from "../../models/enquiry.model";
 import { AssistanceRequest } from "../../models/assistanceRequest.model";
+import { Donation } from "../../models/donation.model";
+import { Volunteer } from "../../models/volunteer.model";
+import { Case } from "../../models/case.model";
+import { NewsletterSubscriber } from "../../models/newsletterSubscriber.model";
+import { Campaign } from "../../models/campaign.model";
 import { Setting } from "../../models/setting.model";
 import { env } from "../../config/env";
 
@@ -463,24 +468,53 @@ async function fetchInternalMetrics() {
   const previousMonthStart = new Date(monthStart); previousMonthStart.setMonth(previousMonthStart.getMonth() - 1);
   const previousPeriodEnd = new Date(previousMonthStart);
   previousPeriodEnd.setDate(Math.min(now.getDate(), new Date(monthStart.getFullYear(), monthStart.getMonth(), 0).getDate()) + 1);
-  const [posts, postsMtd, postsPrevious, enquiries, enquiriesMtd, enquiriesPrevious, requests, recent, locations, settings] = await Promise.all([
+  const [
+    posts, postsMtd, postsPrevious,
+    enquiries, enquiriesMtd, enquiriesPrevious,
+    requests,
+    recent, locations, settings,
+    totalDonations, donationsMtd,
+    totalVolunteers, activeVolunteers,
+    totalCases, openCases,
+    totalSubscribers, subscribersMtd,
+    totalCampaigns, activeCampaigns,
+    donationAmountResult,
+  ] = await Promise.all([
     BlogPost.countDocuments(),
     BlogPost.countDocuments({ createdAt: { $gte: monthStart } }),
     BlogPost.countDocuments({ createdAt: { $gte: previousMonthStart, $lt: previousPeriodEnd } }),
     Enquiry.countDocuments(), Enquiry.countDocuments({ createdAt: { $gte: monthStart } }),
     Enquiry.countDocuments({ createdAt: { $gte: previousMonthStart, $lt: previousPeriodEnd } }),
-    AssistanceRequest.countDocuments(), Enquiry.find().sort({ createdAt: -1 }).limit(5).select("name category city createdAt").lean(),
+    AssistanceRequest.countDocuments(),
+    Enquiry.find().sort({ createdAt: -1 }).limit(5).select("name category city createdAt").lean(),
     Enquiry.aggregate([{ $match: { city: { $nin: [null, ""] } } }, { $group: { _id: "$city", count: { $sum: 1 } } }, { $sort: { count: -1 } }, { $limit: 5 }]),
     Setting.findOne().lean(),
+    Donation.countDocuments(),
+    Donation.countDocuments({ createdAt: { $gte: monthStart } }),
+    Volunteer.countDocuments(),
+    Volunteer.countDocuments({ status: "active" }).catch(() => 0),
+    Case.countDocuments(),
+    Case.countDocuments({ status: { $in: ["open", "in_progress", "pending"] } }).catch(() => 0),
+    NewsletterSubscriber.countDocuments(),
+    NewsletterSubscriber.countDocuments({ createdAt: { $gte: monthStart } }),
+    Campaign.countDocuments(),
+    Campaign.countDocuments({ status: "active" }).catch(() => 0),
+    Donation.aggregate([{ $group: { _id: null, total: { $sum: "$amount" } } }]).catch(() => []),
   ]);
   const pageCount = settings
     ? Object.keys(settings).filter((key) => key.toLowerCase().endsWith("page") && (settings as Record<string, unknown>)[key]).length
     : 0;
+  const totalDonationAmount = (donationAmountResult as Array<{ total?: number }>)[0]?.total ?? 0;
   return source("connected", {
     totalPages: pageCount, totalPosts: posts, totalEnquiries: enquiries, enquiriesMtd, totalRequests: requests,
     growth: { posts: growth(postsMtd, postsPrevious), enquiriesMtd: growth(enquiriesMtd, enquiriesPrevious) },
     recentSubmissions: recent.map((item) => ({ id: String(item._id), name: item.name, type: item.category, city: item.city, createdAt: item.createdAt })),
     topLocations: locations.map((item: { _id: string; count: number }) => ({ city: item._id, count: item.count })),
+    donations: { total: totalDonations, mtd: donationsMtd, totalAmount: totalDonationAmount },
+    volunteers: { total: totalVolunteers, active: activeVolunteers },
+    cases: { total: totalCases, open: openCases },
+    newsletter: { total: totalSubscribers, mtd: subscribersMtd },
+    campaigns: { total: totalCampaigns, active: activeCampaigns },
   });
 }
 
