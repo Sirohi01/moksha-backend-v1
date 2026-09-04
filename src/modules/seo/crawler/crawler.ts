@@ -181,8 +181,16 @@ export async function runCrawl(
         const isHtml = Boolean(outcome.contentType && /text\/html|application\/xhtml/i.test(outcome.contentType));
         let body = outcome.body;
         let renderedWithJs = false;
+        const staticParsed = isHtml && body
+          ? parseHtml(body!, outcome.finalUrl, hostname, config.includeSubdomains)
+          : null;
+        const looksClientRendered = Boolean(
+          body &&
+          (body.includes("/_next/static/") || body.includes("__NEXT_DATA__")) &&
+          (staticParsed?.links.length ?? 0) < 3,
+        );
 
-        if (jsAvailable && isHtml && outcome.ok) {
+        if (jsAvailable && isHtml && outcome.ok && looksClientRendered) {
           const rendered = await renderPage(outcome.finalUrl, config.requestTimeoutMs);
           if (rendered) {
             body = rendered;
@@ -190,7 +198,9 @@ export async function runCrawl(
           }
         }
 
-        const parsed = isHtml && body ? parseHtml(body, outcome.finalUrl, hostname, config.includeSubdomains) : null;
+        const parsed = renderedWithJs
+          ? parseHtml(body!, outcome.finalUrl, hostname, config.includeSubdomains)
+          : staticParsed;
         const schema = parsed ? validateJsonLdBlocks(parsed.jsonLdBlocks) : null;
 
         pages.push({

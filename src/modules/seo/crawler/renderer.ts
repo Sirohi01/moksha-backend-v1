@@ -1,32 +1,13 @@
 import { assertSafeUrl } from "./url.util";
 import { CRAWLER_USER_AGENT } from "./fetcher";
 import { logger } from "../../../config/logger";
+import type { Browser, BrowserContext, Page } from "playwright";
 
-type PlaywrightModule = {
-  chromium: {
-    launch(options?: Record<string, unknown>): Promise<PlaywrightBrowser>;
-  };
-};
-
-interface PlaywrightBrowser {
-  newContext(options?: Record<string, unknown>): Promise<PlaywrightContext>;
-  close(): Promise<void>;
-}
-
-interface PlaywrightContext {
-  newPage(): Promise<PlaywrightPage>;
-  close(): Promise<void>;
-}
-
-interface PlaywrightPage {
-  goto(url: string, options?: Record<string, unknown>): Promise<unknown>;
-  content(): Promise<string>;
-  close(): Promise<void>;
-}
+type PlaywrightModule = typeof import("playwright");
 
 let cachedModule: PlaywrightModule | null = null;
 let moduleChecked = false;
-let browser: PlaywrightBrowser | null = null;
+let browser: Browser | null = null;
 
 function loadPlaywright(): PlaywrightModule | null {
   if (moduleChecked) return cachedModule;
@@ -45,7 +26,7 @@ export async function isJsRenderingAvailable(): Promise<boolean> {
   return loadPlaywright() !== null;
 }
 
-async function getBrowser(): Promise<PlaywrightBrowser | null> {
+async function getBrowser(): Promise<Browser | null> {
   const playwright = loadPlaywright();
   if (!playwright) return null;
   if (browser) return browser;
@@ -66,18 +47,35 @@ export async function renderPage(url: string, timeoutMs = 20000): Promise<string
   const instance = await getBrowser();
   if (!instance) return null;
 
-  let context: PlaywrightContext | null = null;
+  let context: BrowserContext | null = null;
+  let page: Page | null = null;
   try {
     context = await instance.newContext({ userAgent: CRAWLER_USER_AGENT });
-    const page = await context.newPage();
-    await page.goto(url, { waitUntil: "networkidle", timeout: timeoutMs });
+    page = await context.newPage();
+    await page.route("**/*", async (route) => {
+      const request = route.request();
+      if (["image", "media", "font"].includes(request.resourceType())) {
+        await route.abort();
+        return;
+      }
+      if (request.isNavigationRequest()) {
+        const navigationSafety = await assertSafeUrl(request.url());
+        if (!navigationSafety.safe) {
+          await route.abort();
+          return;
+        }
+      }
+      await route.continue();
+    });
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
+    await page.waitForLoadState("networkidle", { timeout: Math.min(timeoutMs, 5000) }).catch(() => undefined);
     const html = await page.content();
-    await page.close();
     return html;
   } catch (error) {
     logger.warn("seoCrawler: JS rendering failed", { url, err: error });
     return null;
   } finally {
+    await page?.close().catch(() => undefined);
     await context?.close().catch(() => undefined);
   }
 }
