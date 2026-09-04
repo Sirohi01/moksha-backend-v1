@@ -5,6 +5,7 @@ import { logger } from "./config/logger";
 import { processNotificationQueue } from "./lib/notificationQueue.service";
 import { captureSnapshot } from "./lib/reportSnapshot.service";
 import { runSystemServiceReminderSweep } from "./lib/systemServiceReminder.service";
+import { runScheduledAudits } from "./modules/seo/seo.scheduler";
 
 // PRD Phase E1 — 1 minute, so a notification on the shortest retry backoff step (also 1 minute)
 // gets picked up promptly rather than sitting until the next longer-spaced sweep.
@@ -15,6 +16,9 @@ const REPORT_SNAPSHOT_INTERVAL_MS = 60 * 60_000;
 // Expiry is day-granularity, so hourly is plenty to catch a threshold crossing well within the
 // same day it happens; the per-item dedupe guards keep repeated sweeps from double-firing.
 const SYSTEM_SERVICE_REMINDER_INTERVAL_MS = 60 * 60_000;
+// Scheduled SEO audits are hour-granular (schedule.hourUtc), so a 15-minute sweep picks a due
+// audit up well inside its hour without hammering the crawler queue.
+const SEO_AUDIT_SWEEP_INTERVAL_MS = 15 * 60_000;
 
 async function start(): Promise<void> {
   await connectDB();
@@ -39,11 +43,16 @@ async function start(): Promise<void> {
     runSystemServiceReminderSweep().catch((err) => logger.error("systemServiceReminder: sweep failed", { err }));
   }, SYSTEM_SERVICE_REMINDER_INTERVAL_MS);
 
+  const seoAuditTimer = setInterval(() => {
+    runScheduledAudits().catch((err) => logger.error("seoScheduler: sweep failed", { err }));
+  }, SEO_AUDIT_SWEEP_INTERVAL_MS);
+
   const shutdown = (signal: string) => {
     logger.info(`${signal} received, shutting down gracefully`);
     clearInterval(notificationQueueTimer);
     clearInterval(reportSnapshotTimer);
     clearInterval(systemServiceReminderTimer);
+    clearInterval(seoAuditTimer);
     server.close(() => process.exit(0));
   };
 

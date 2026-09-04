@@ -50,6 +50,10 @@ const envSchema = z.object({
   PAGESPEED_API_KEY: optionalString,
   WEBSITE_URL: z.string().url().default("https://mokshasewa.org"),
 
+  GEMINI_API_KEY: optionalString,
+  GEMINI_MODEL: z.string().default("gemini-2.0-flash"),
+  SEO_ALERT_EMAILS: optionalString,
+
   RAZORPAY_KEY_ID: z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),

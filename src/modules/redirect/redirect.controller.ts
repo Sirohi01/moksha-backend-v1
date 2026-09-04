@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { Redirect } from "../../models/redirect.model";
 
-export const getRedirects = async (req: Request, res: Response) => {
+export const getRedirects = async (_req: Request, res: Response) => {
   try {
     const redirects = await Redirect.find().sort({ createdAt: -1 });
     res.json({ success: true, data: redirects });
@@ -33,7 +33,10 @@ export const updateRedirect = async (req: Request, res: Response) => {
       { source, destination, permanent, isActive },
       { new: true, runValidators: true }
     );
-    if (!redirect) return res.status(404).json({ success: false, message: "Redirect not found" });
+    if (!redirect) {
+      res.status(404).json({ success: false, message: "Redirect not found" });
+      return;
+    }
     res.json({ success: true, data: redirect });
   } catch (error: any) {
     if (error.code === 11000) {
@@ -48,7 +51,10 @@ export const deleteRedirect = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const redirect = await Redirect.findByIdAndDelete(id);
-    if (!redirect) return res.status(404).json({ success: false, message: "Redirect not found" });
+    if (!redirect) {
+      res.status(404).json({ success: false, message: "Redirect not found" });
+      return;
+    }
     res.json({ success: true, data: {} });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });

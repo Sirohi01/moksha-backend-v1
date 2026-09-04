@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import tls from "node:tls";
 import { lookup } from "node:dns/promises";
 import { BlogPost } from "../../models/blogPost.model";
@@ -11,6 +10,7 @@ import { NewsletterSubscriber } from "../../models/newsletterSubscriber.model";
 import { Campaign } from "../../models/campaign.model";
 import { Setting } from "../../models/setting.model";
 import { env } from "../../config/env";
+import { getGoogleAccessToken } from "../../lib/googleAuth";
 
 type SourceStatus = "connected" | "not_connected" | "error";
 
@@ -30,40 +30,6 @@ function source<T>(status: SourceStatus, data: T | null, message?: string): Sour
 function growth(current: number, previous: number): number | null {
   if (previous === 0) return current === 0 ? 0 : null;
   return ((current - previous) / previous) * 100;
-}
-
-function base64Url(value: string | Buffer): string {
-  return Buffer.from(value).toString("base64url");
-}
-
-async function getGoogleAccessToken(): Promise<string | null> {
-  if (!env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY) return null;
-  const issuedAt = Math.floor(Date.now() / 1000);
-  const header = base64Url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
-  const claim = base64Url(JSON.stringify({
-    iss: env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    scope: "https://www.googleapis.com/auth/analytics.readonly https://www.googleapis.com/auth/webmasters.readonly",
-    aud: "https://oauth2.googleapis.com/token",
-    iat: issuedAt,
-    exp: issuedAt + 3600,
-  }));
-  const unsigned = `${header}.${claim}`;
-  const privateKey = env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY.replace(/\\n/g, "\n");
-  const signature = crypto.sign("RSA-SHA256", Buffer.from(unsigned), privateKey);
-  const assertion = `${unsigned}.${base64Url(signature)}`;
-  const response = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    signal: AbortSignal.timeout(15_000),
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion,
-    }),
-  });
-  if (!response.ok) throw new Error("Google service-account authentication failed");
-  const body = await response.json() as { access_token?: string };
-  if (!body.access_token) throw new Error("Google access token was not returned");
-  return body.access_token;
 }
 
 async function fetchGa4(token: string | null) {
