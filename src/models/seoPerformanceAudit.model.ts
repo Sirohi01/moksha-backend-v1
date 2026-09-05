@@ -12,6 +12,8 @@ export interface ISeoLabMetrics {
   speedIndexMs: number | null;
   ttiMs: number | null;
   serverResponseMs: number | null;
+  totalByteWeight: number | null;
+  resourceCount: number | null;
 }
 
 export interface ISeoFieldMetrics {
@@ -37,6 +39,7 @@ export interface ISeoPerformanceAudit extends Document {
   lab: ISeoLabMetrics;
   field: ISeoFieldMetrics;
   opportunities: Array<{ id: string; title: string; savingsMs: number | null }>;
+  renderBlockingResources: Array<{ url: string | null; type: string; savingsMs: number | null; source: string }>;
   status: "ok" | "error";
   error: string | null;
   fetchedAt: Date;
@@ -57,6 +60,8 @@ const labSchema = new Schema<ISeoLabMetrics>(
     speedIndexMs: { type: Number, default: null },
     ttiMs: { type: Number, default: null },
     serverResponseMs: { type: Number, default: null },
+    totalByteWeight: { type: Number, default: null },
+    resourceCount: { type: Number, default: null },
   },
   { _id: false },
 );
@@ -75,6 +80,11 @@ const fieldSchema = new Schema<ISeoFieldMetrics>(
   { _id: false },
 );
 
+const renderBlockingResourceSchema = new Schema(
+  { url: { type: String, default: null }, type: { type: String, required: true }, savingsMs: { type: Number, default: null }, source: { type: String, required: true } },
+  { _id: false },
+);
+
 const seoPerformanceAuditSchema = new Schema<ISeoPerformanceAudit>(
   {
     siteId: { type: Schema.Types.ObjectId, ref: "SeoSite", required: true, index: true },
@@ -90,6 +100,7 @@ const seoPerformanceAuditSchema = new Schema<ISeoPerformanceAudit>(
       type: [new Schema({ id: String, title: String, savingsMs: Number }, { _id: false })],
       default: [],
     },
+    renderBlockingResources: { type: [renderBlockingResourceSchema], default: [] },
     status: { type: String, enum: ["ok", "error"], default: "ok" },
     error: { type: String, default: null, maxlength: 500 },
     fetchedAt: { type: Date, default: Date.now, index: true },

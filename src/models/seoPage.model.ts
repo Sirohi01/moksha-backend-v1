@@ -34,6 +34,15 @@ export interface ISeoPagePerformance {
   fieldLcpMs: number | null;
   fieldCls: number | null;
   fieldInpMs: number | null;
+  labFcpMs: number | null;
+  labTbtMs: number | null;
+  labSpeedIndexMs: number | null;
+  labServerResponseMs: number | null;
+  fieldFcpMs: number | null;
+  fieldTtfbMs: number | null;
+  transferredBytes: number | null;
+  resourceCount: number | null;
+  renderBlockingResources: Array<{ url: string | null; type: string; savingsMs: number | null; source: string }>;
   fetchedAt: Date | null;
 }
 
@@ -77,6 +86,8 @@ export interface ISeoPage extends Document {
   metaDescription: string | null;
   metaDescriptionLength: number;
   metaRobots: string | null;
+  metaKeywords: string | null;
+  metaKeywordCount: number;
   canonical: string | null;
   canonicalNormalized: string | null;
   canonicalCount: number;
@@ -85,10 +96,15 @@ export interface ISeoPage extends Document {
   ogDescription: string | null;
   ogImage: string | null;
   ogType: string | null;
+  ogUrl: string | null;
   twitterCard: string | null;
   twitterTitle: string | null;
   twitterDescription: string | null;
   twitterImage: string | null;
+  socialStatus: { openGraph: string; twitter: string };
+  keywordAnalysis: Record<string, unknown>;
+  browserHealth: Record<string, unknown>;
+  cdn: Record<string, unknown>;
   lang: string | null;
   viewport: string | null;
   hreflang: Array<{ hreflang: string; href: string }>;
@@ -184,6 +200,11 @@ const headingSchema = new Schema<ISeoHeading>(
   { _id: false },
 );
 
+const renderBlockingResourceSchema = new Schema(
+  { url: { type: String, default: null }, type: { type: String, required: true }, savingsMs: { type: Number, default: null }, source: { type: String, required: true } },
+  { _id: false },
+);
+
 const performanceSchema = new Schema<ISeoPagePerformance>(
   {
     auditId: { type: Schema.Types.ObjectId, ref: "SeoPerformanceAudit", default: null },
@@ -197,6 +218,15 @@ const performanceSchema = new Schema<ISeoPagePerformance>(
     fieldLcpMs: { type: Number, default: null },
     fieldCls: { type: Number, default: null },
     fieldInpMs: { type: Number, default: null },
+    labFcpMs: { type: Number, default: null },
+    labTbtMs: { type: Number, default: null },
+    labSpeedIndexMs: { type: Number, default: null },
+    labServerResponseMs: { type: Number, default: null },
+    fieldFcpMs: { type: Number, default: null },
+    fieldTtfbMs: { type: Number, default: null },
+    transferredBytes: { type: Number, default: null },
+    resourceCount: { type: Number, default: null },
+    renderBlockingResources: { type: [renderBlockingResourceSchema], default: [] },
     fetchedAt: { type: Date, default: null },
   },
   { _id: false },
@@ -248,6 +278,8 @@ const seoPageSchema = new Schema<ISeoPage>(
     metaDescription: { type: String, default: null, maxlength: 2000 },
     metaDescriptionLength: { type: Number, default: 0 },
     metaRobots: { type: String, default: null, maxlength: 300 },
+    metaKeywords: { type: String, default: null, maxlength: 2000 },
+    metaKeywordCount: { type: Number, default: 0 },
     canonical: { type: String, default: null, maxlength: 2000 },
     canonicalNormalized: { type: String, default: null, maxlength: 2000 },
     canonicalCount: { type: Number, default: 0 },
@@ -256,10 +288,15 @@ const seoPageSchema = new Schema<ISeoPage>(
     ogDescription: { type: String, default: null, maxlength: 2000 },
     ogImage: { type: String, default: null, maxlength: 2000 },
     ogType: { type: String, default: null, maxlength: 100 },
+    ogUrl: { type: String, default: null, maxlength: 2000 },
     twitterCard: { type: String, default: null, maxlength: 100 },
     twitterTitle: { type: String, default: null, maxlength: 1000 },
     twitterDescription: { type: String, default: null, maxlength: 2000 },
     twitterImage: { type: String, default: null, maxlength: 2000 },
+    socialStatus: { type: Schema.Types.Mixed, default: () => ({ openGraph: "not_available", twitter: "not_available" }) },
+    keywordAnalysis: { type: Schema.Types.Mixed, default: () => ({ available: false, targets: [] }) },
+    browserHealth: { type: Schema.Types.Mixed, default: () => ({ consoleErrors: [], consoleWarnings: [], jsExceptions: [], failedRequests: [] }) },
+    cdn: { type: Schema.Types.Mixed, default: () => ({ status: "unable_to_determine", provider: null, evidence: [] }) },
     lang: { type: String, default: null, maxlength: 50 },
     viewport: { type: String, default: null, maxlength: 300 },
     hreflang: {

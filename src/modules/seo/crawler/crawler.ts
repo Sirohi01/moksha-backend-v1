@@ -9,7 +9,7 @@ import {
   queryVariantKey,
 } from "./url.util";
 import { validateJsonLdBlocks, SchemaValidationResult } from "../engine/schema.validator";
-import { renderPage, isJsRenderingAvailable } from "./renderer";
+import { renderPage, isJsRenderingAvailable, type BrowserProblem } from "./renderer";
 
 export interface CrawlConfig {
   siteUrl: string;
@@ -35,6 +35,7 @@ export interface CrawledPage {
   contentType: string | null;
   responseTimeMs: number | null;
   contentLength: number | null;
+  responseHeaders: Record<string, string>;
   finalUrl: string | null;
   redirected: boolean;
   hops: FetchHop[];
@@ -43,6 +44,9 @@ export interface CrawledPage {
   blocked: boolean;
   isHtml: boolean;
   renderedWithJs: boolean;
+  browserProblems: BrowserProblem[];
+  transferredBytes: number | null;
+  resourceCount: number | null;
   parsed: ParsedPage | null;
   schema: SchemaValidationResult | null;
   inSitemap: boolean;
@@ -184,17 +188,21 @@ export async function runCrawl(
         const staticParsed = isHtml && body
           ? parseHtml(body!, outcome.finalUrl, hostname, config.includeSubdomains)
           : null;
-        const looksClientRendered = Boolean(
-          body &&
-          (body.includes("/_next/static/") || body.includes("__NEXT_DATA__")) &&
-          (staticParsed?.links.length ?? 0) < 3,
-        );
+        let browserProblems: BrowserProblem[] = [];
+        let transferredBytes: number | null = null;
+        let resourceCount: number | null = null;
 
-        if (jsAvailable && isHtml && outcome.ok && looksClientRendered) {
+        // When the operator enables JS rendering, run every successful HTML page in the
+        // browser. Besides rendered markup, this is what makes Browser Health telemetry
+        // (console messages, exceptions and failed requests) complete and trustworthy.
+        if (jsAvailable && isHtml && outcome.ok) {
           const rendered = await renderPage(outcome.finalUrl, config.requestTimeoutMs);
           if (rendered) {
-            body = rendered;
+            body = rendered.html;
             renderedWithJs = true;
+            browserProblems = rendered.problems;
+            transferredBytes = rendered.transferredBytes;
+            resourceCount = rendered.resourceCount;
           }
         }
 
@@ -212,6 +220,7 @@ export async function runCrawl(
           contentType: outcome.contentType,
           responseTimeMs: outcome.responseTimeMs,
           contentLength: outcome.contentLength,
+          responseHeaders: outcome.headers,
           finalUrl: outcome.finalUrl,
           redirected: outcome.redirected,
           hops: outcome.hops,
@@ -220,6 +229,9 @@ export async function runCrawl(
           blocked: outcome.blocked,
           isHtml,
           renderedWithJs,
+          browserProblems,
+          transferredBytes,
+          resourceCount,
           parsed,
           schema,
           inSitemap: sitemapNormalized.has(item.normalized),
@@ -308,6 +320,7 @@ function buildBlockedPage(item: FrontierItem, inSitemap: boolean): CrawledPage {
     contentType: null,
     responseTimeMs: null,
     contentLength: null,
+    responseHeaders: {},
     finalUrl: null,
     redirected: false,
     hops: [],
@@ -316,6 +329,9 @@ function buildBlockedPage(item: FrontierItem, inSitemap: boolean): CrawledPage {
     blocked: false,
     isHtml: false,
     renderedWithJs: false,
+    browserProblems: [],
+    transferredBytes: null,
+    resourceCount: null,
     parsed: null,
     schema: null,
     inSitemap,

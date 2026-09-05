@@ -8,13 +8,17 @@ async function main(): Promise<void> {
   const siteArg = args.find((arg) => arg.startsWith("--site="))?.split("=")[1];
   const skipPerformance = args.includes("--skip-performance");
   const skipGoogleData = args.includes("--skip-google");
+  const renderJs = args.includes("--render-js") ? true : undefined;
+  const maxPagesArg = args.find((arg) => arg.startsWith("--max-pages="))?.split("=")[1];
+  const maxPages = maxPagesArg ? Number(maxPagesArg) : undefined;
+  if (maxPages != null && (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > 5000)) throw new Error("--max-pages must be an integer from 1 to 5000");
 
   const site = siteArg ? await SeoSite.findById(siteArg) : await ensurePrimarySite();
   if (!site) throw new Error(`No SEO site found for id ${siteArg}`);
 
   logger.info(`Auditing ${site.url}`, { skipPerformance, skipGoogleData });
   const startedAt = Date.now();
-  const crawl = await runSeoAudit(site._id, { trigger: "manual", skipPerformance, skipGoogleData });
+  const crawl = await runSeoAudit(site._id, { trigger: "manual", skipPerformance, skipGoogleData, renderJs, maxPages });
 
   logger.info("Audit finished", {
     crawlId: String(crawl._id),

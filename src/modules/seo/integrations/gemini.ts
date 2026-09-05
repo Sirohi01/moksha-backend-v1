@@ -232,8 +232,10 @@ export async function generateSiteRecommendations(
   input: SiteRecommendationInput,
 ): Promise<GeminiOutcome<{ summary: string; items: ISeoRecommendationItem[] }>> {
   const prompt = [
-    "Produce a prioritised remediation plan for this website based only on the measured audit facts below.",
-    "Rank by expected SEO impact against effort. Reference the exact ruleIds provided.",
+    "Explain why the deterministic SEO score has its measured value, then produce a prioritised remediation plan based only on the facts below.",
+    "The numeric score is final and rule-based: do not recalculate it or promise an exact score increase.",
+    "In the summary identify the biggest measured score losses, performance and search-visibility context, and the top three actions in priority order.",
+    "Rank actions by expected area of improvement against effort and reference the exact ruleIds provided.",
     "Do not invent traffic, ranking or competitor data.",
     "",
     "MEASURED FACTS (JSON):",

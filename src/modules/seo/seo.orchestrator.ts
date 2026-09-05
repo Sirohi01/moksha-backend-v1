@@ -19,6 +19,7 @@ import { normalizeUrl } from "./crawler/url.util";
 import { buildSiteGraph, SiteGraph } from "./engine/graph";
 import { computeIndexability, DetectedIssue, PerformanceSummary, runRules } from "./engine/rules";
 import { computePageScore, computeSiteScore } from "./engine/score";
+import { analyzeKeywords, detectCdn, groupBrowserProblems, socialStatus, type KeywordUsage } from "./engine/pageSignals";
 import { fetchAnalyticsSnapshot, fetchSearchConsoleSnapshot, runPageSpeedAudit } from "./integrations/google";
 import { evaluateAlerts } from "./seo.alerts";
 
@@ -30,12 +31,36 @@ export interface RunAuditOptions {
   trigger?: "manual" | "scheduled";
   skipPerformance?: boolean;
   skipGoogleData?: boolean;
+  renderJs?: boolean;
+  maxPages?: number;
 }
 
 export class AuditInProgressError extends Error {
   constructor(public readonly crawlId: string) {
     super("An audit is already running for this site");
   }
+}
+
+export async function recoverAbandonedSeoAudits(): Promise<number> {
+  const now = new Date();
+  const result = await SeoCrawl.updateMany(
+    { status: { $in: ["queued", "running"] } },
+    {
+      $set: {
+        status: "failed",
+        completedAt: now,
+        error: "Audit interrupted because the backend process restarted",
+      },
+      $push: {
+        log: {
+          at: now,
+          level: "error",
+          message: "Audit interrupted because the backend process restarted. Start a new audit to retry.",
+        },
+      },
+    },
+  );
+  return result.modifiedCount;
 }
 
 export async function runSeoAudit(siteId: Types.ObjectId | string, options: RunAuditOptions = {}): Promise<ISeoCrawl> {
@@ -136,14 +161,14 @@ async function executeAudit(
   const crawlResult = await runCrawl(
     {
       siteUrl: site.url,
-      maxPages: settings.maxPages,
+      maxPages: options.maxPages ?? settings.maxPages,
       maxDepth: settings.maxDepth,
       concurrency: settings.concurrency,
       requestTimeoutMs: settings.requestTimeoutMs,
       politenessDelayMs: settings.politenessDelayMs,
       respectRobots: settings.respectRobots,
       followSitemap: settings.followSitemap,
-      renderJs: settings.renderJs,
+      renderJs: options.renderJs ?? settings.renderJs,
       includeSubdomains: false,
       excludePatterns: settings.excludePatterns,
       extraSeedUrls: [...settings.extraSeedUrls, ...searchSeedUrls],
@@ -179,6 +204,18 @@ async function executeAudit(
   for (const edge of crawlResult.edges) {
     if (linkTargets.has(edge.target)) continue;
     linkTargets.set(edge.target, { url: edge.targetHref, normalized: edge.target, isInternal: edge.isInternal });
+  }
+  for (const page of crawlResult.pages) {
+    for (const rawUrl of [page.parsed?.ogImage, page.parsed?.twitterImage]) {
+      if (!rawUrl) continue;
+      const parsed = normalizeUrl(rawUrl, page.finalUrl ?? page.url);
+      if (!parsed || linkTargets.has(parsed.normalized)) continue;
+      linkTargets.set(parsed.normalized, {
+        url: parsed.href,
+        normalized: parsed.normalized,
+        isInternal: parsed.hostname === crawlResult.hostname,
+      });
+    }
   }
 
   addLog(`Checking ${linkTargets.size} unique link target(s)`);
@@ -231,6 +268,7 @@ async function executeAudit(
   addLog(`Analytics: ${analyticsResult.status}${analyticsResult.message ? ` (${analyticsResult.message})` : ""}`);
 
   const searchByPage = new Map<string, { clicks: number; impressions: number; ctr: number; position: number }>();
+  const searchQueriesByPage = new Map<string, string[]>();
   if (searchResult.data) {
     for (const row of searchResult.data.byPage) {
       const normalized = normalizeUrl(row.key)?.normalized;
@@ -241,6 +279,13 @@ async function executeAudit(
         ctr: row.ctr,
         position: row.position,
       });
+    }
+    for (const pair of [...searchResult.data.queryPagePairs].sort((a, b) => b.impressions - a.impressions)) {
+      const normalized = normalizeUrl(pair.page)?.normalized;
+      if (!normalized) continue;
+      const current = searchQueriesByPage.get(normalized) ?? [];
+      if (current.length < 5 && !current.includes(pair.query)) current.push(pair.query);
+      searchQueriesByPage.set(normalized, current);
     }
   }
 
@@ -253,6 +298,19 @@ async function executeAudit(
         engagementRate: row.engagementRate,
       });
     }
+  }
+
+  const keywordAnalyses = new Map<string, ReturnType<typeof analyzeKeywords>>();
+  for (const page of crawlResult.pages) {
+    const configured = site.crawlSettings.keywordTargets?.find((target) => normalizeUrl(target.url)?.normalized === page.normalizedUrl);
+    const targets: Array<{ keyword: string; source: KeywordUsage["source"] }> = configured
+      ? [
+          { keyword: configured.primary, source: "configured_primary" as const },
+          ...configured.secondary.map((keyword) => ({ keyword, source: "configured_secondary" as const })),
+        ]
+      : [];
+    targets.push(...(searchQueriesByPage.get(page.normalizedUrl) ?? []).map((keyword) => ({ keyword, source: "search_console" as const })));
+    keywordAnalyses.set(page.normalizedUrl, analyzeKeywords(page.parsed, targets));
   }
 
   const sitemapUrls = new Set(crawlResult.sitemapUrls);
@@ -268,6 +326,7 @@ async function executeAudit(
     sitemapFound: crawlResult.sitemapFound,
     robots: crawlResult.robots,
     performance,
+    keywordAnalyses,
   });
   addLog(`Rules engine produced ${issues.length} issue(s)`);
 
@@ -287,6 +346,8 @@ async function executeAudit(
     performance,
     performancePageFields,
     searchByPage,
+    searchQueriesByPage,
+    keywordAnalyses,
     analyticsByPath,
     searchResult.data ? { start: searchResult.data.rangeStart, end: searchResult.data.rangeEnd } : null,
   );
@@ -461,22 +522,25 @@ async function runPerformanceAudits(
   const summaries = new Map<string, PerformanceSummary>();
   if (!targets.length) return summaries;
 
-  addLog(`Running PageSpeed Insights on ${targets.length} URL(s)`);
+  const strategies = ["mobile", "desktop"] as const;
+  const primaryStrategy = site.crawlSettings.performanceStrategy;
+  addLog(`Running PageSpeed Insights (${strategies.join(" + ")}) on ${targets.length} URL(s)`);
   const pageByNormalized = new Map(crawlResult.pages.map((page) => [page.normalizedUrl, page]));
 
   for (const normalized of targets) {
     const page = pageByNormalized.get(normalized);
     const targetUrl = page?.finalUrl ?? page?.url ?? normalized;
-    const outcome = await runPageSpeedAudit(targetUrl, site.crawlSettings.performanceStrategy);
+    for (const strategy of strategies) {
+    const outcome = await runPageSpeedAudit(targetUrl, strategy);
 
     if (outcome.status !== "connected" || !outcome.data) {
-      addLog(`PageSpeed failed for ${normalized}: ${outcome.message ?? "unknown error"}`, "warn");
+      addLog(`PageSpeed (${strategy}) failed for ${normalized}: ${outcome.message ?? "unknown error"}`, "warn");
       await SeoPerformanceAudit.create({
         siteId: site._id,
         crawlId,
         url: targetUrl,
         normalizedUrl: normalized,
-        strategy: site.crawlSettings.performanceStrategy,
+        strategy,
         status: "error",
         error: (outcome.message ?? "PageSpeed request failed").slice(0, 500),
       });
@@ -493,21 +557,24 @@ async function runPerformanceAudits(
       lab: outcome.data.lab,
       field: outcome.data.field,
       opportunities: outcome.data.opportunities,
+      renderBlockingResources: outcome.data.renderBlockingResources,
       status: "ok",
     });
 
-    summaries.set(normalized, {
+    if (strategy === primaryStrategy) {
+      summaries.set(normalized, {
       normalizedUrl: normalized,
       performance: outcome.data.lab.performance,
       lcpMs: outcome.data.field.available ? outcome.data.field.lcpMs : outcome.data.lab.lcpMs,
       clsScore: outcome.data.field.available ? outcome.data.field.clsScore : outcome.data.lab.clsScore,
       inpMs: outcome.data.field.inpMs,
       fieldAvailable: outcome.data.field.available,
-    });
+      renderBlockingCount: outcome.data.renderBlockingResources.length,
+      });
 
     // Written by persistPages rather than here: on a site's first crawl the SeoPage documents
     // do not exist yet, so an update at this point would silently match nothing.
-    pageFields.set(normalized, {
+      pageFields.set(normalized, {
       auditId: audit._id,
       strategy: outcome.data.strategy,
       performance: outcome.data.lab.performance,
@@ -519,8 +586,19 @@ async function runPerformanceAudits(
       fieldLcpMs: outcome.data.field.lcpMs,
       fieldCls: outcome.data.field.clsScore,
       fieldInpMs: outcome.data.field.inpMs,
+      labFcpMs: outcome.data.lab.fcpMs,
+      labTbtMs: outcome.data.lab.tbtMs,
+      labSpeedIndexMs: outcome.data.lab.speedIndexMs,
+      labServerResponseMs: outcome.data.lab.serverResponseMs,
+      fieldFcpMs: outcome.data.field.fcpMs,
+      fieldTtfbMs: outcome.data.field.ttfbMs,
+      transferredBytes: outcome.data.lab.totalByteWeight,
+      resourceCount: outcome.data.lab.resourceCount,
+      renderBlockingResources: outcome.data.renderBlockingResources,
       fetchedAt: audit.fetchedAt,
-    });
+      });
+    }
+    }
   }
 
   return summaries;
@@ -535,6 +613,8 @@ async function persistPages(
   performance: Map<string, PerformanceSummary>,
   performancePageFields: Map<string, Record<string, unknown>>,
   searchByPage: Map<string, { clicks: number; impressions: number; ctr: number; position: number }>,
+  searchQueriesByPage: Map<string, string[]>,
+  keywordAnalyses: Map<string, ReturnType<typeof analyzeKeywords>>,
   analyticsByPath: Map<string, { views: number; users: number; engagementRate: number }>,
   searchRange: { start: string; end: string } | null,
 ): Promise<Map<string, Types.ObjectId>> {
@@ -552,6 +632,16 @@ async function persistPages(
     const searchStats = searchByPage.get(page.normalizedUrl);
     const analyticsStats = analyticsByPath.get(page.path);
     const perf = performance.get(page.normalizedUrl);
+    const configuredTarget = site.crawlSettings.keywordTargets?.find((target) => normalizeUrl(target.url)?.normalized === page.normalizedUrl);
+    const keywordTargets: Array<{ keyword: string; source: KeywordUsage["source"] }> = configuredTarget
+      ? [
+          { keyword: configuredTarget.primary, source: "configured_primary" as const },
+          ...configuredTarget.secondary.map((keyword) => ({ keyword, source: "configured_secondary" as const })),
+        ]
+      : [];
+    keywordTargets.push(...(searchQueriesByPage.get(page.normalizedUrl) ?? []).map((keyword) => ({ keyword, source: "search_console" as const })));
+    const keywordAnalysis = keywordAnalyses.get(page.normalizedUrl) ?? analyzeKeywords(parsed, keywordTargets);
+    const assetUrls = parsed ? [...parsed.images.map((image) => image.src), ...parsed.links.filter((link) => !link.isInternal).map((link) => link.href)] : [];
 
     const issueCounts = {
       critical: pageIssues.filter((issue) => issue.severity === "critical").length,
@@ -585,6 +675,8 @@ async function persistPages(
       metaDescription: parsed?.metaDescription ?? null,
       metaDescriptionLength: parsed?.metaDescriptionLength ?? 0,
       metaRobots: parsed?.metaRobots ?? null,
+      metaKeywords: parsed?.metaKeywords ?? null,
+      metaKeywordCount: parsed?.metaKeywordCount ?? 0,
       canonical: canonicalRaw,
       canonicalNormalized: canonicalResolved?.normalized ?? null,
       canonicalCount: parsed?.canonicals.length ?? 0,
@@ -593,10 +685,15 @@ async function persistPages(
       ogDescription: parsed?.ogDescription ?? null,
       ogImage: parsed?.ogImage ?? null,
       ogType: parsed?.ogType ?? null,
+      ogUrl: parsed?.ogUrl ?? null,
       twitterCard: parsed?.twitterCard ?? null,
       twitterTitle: parsed?.twitterTitle ?? null,
       twitterDescription: parsed?.twitterDescription ?? null,
       twitterImage: parsed?.twitterImage ?? null,
+      socialStatus: socialStatus(parsed, page.finalUrl ?? page.url),
+      keywordAnalysis,
+      browserHealth: groupBrowserProblems(page.browserProblems),
+      cdn: detectCdn(page.responseHeaders, assetUrls),
       lang: parsed?.lang ?? null,
       viewport: parsed?.viewport ?? null,
       hreflang: parsed?.hreflang ?? [],

@@ -90,6 +90,7 @@ export const startAudit = asyncHandler(async (req: Request, res: Response) => {
   const options = {
     skipPerformance: isTrue(req.body?.skipPerformance),
     skipGoogleData: isTrue(req.body?.skipGoogleData),
+    renderJs: true,
     trigger: "manual" as const,
   };
 

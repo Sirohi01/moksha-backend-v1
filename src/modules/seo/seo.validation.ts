@@ -111,6 +111,11 @@ export const updateSiteSchema = z.object({
         performanceUrls: z.array(z.string().trim().url()).max(50).optional(),
         performanceStrategy: z.enum(["mobile", "desktop"]).optional(),
         maxPerformanceUrls: z.number().int().min(0).max(50).optional(),
+        keywordTargets: z.array(z.object({
+          url: z.string().trim().url(),
+          primary: z.string().trim().min(1).max(120),
+          secondary: z.array(z.string().trim().min(1).max(120)).max(10).default([]),
+        })).max(500).optional(),
       })
       .optional(),
     schedule: z

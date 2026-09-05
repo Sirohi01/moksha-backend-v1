@@ -31,6 +31,7 @@ export interface PerformanceSummary {
   clsScore: number | null;
   inpMs: number | null;
   fieldAvailable: boolean;
+  renderBlockingCount: number;
 }
 
 export interface DetectedIssue {
@@ -56,6 +57,18 @@ export interface RulesContext {
   sitemapFound: boolean;
   robots: RobotsTxt;
   performance: Map<string, PerformanceSummary>;
+  keywordAnalyses: Map<string, { available: boolean; targets: Array<{
+    keyword: string;
+    source: string;
+    presentInTitle: boolean;
+    presentInMetaDescription: boolean;
+    presentInH1: boolean;
+    presentInHeadings: boolean;
+    presentInOpeningContent: boolean;
+    exactMentions: number;
+    totalWordCount: number;
+    densityPercent: number;
+  }> }>;
 }
 
 function issue(
@@ -406,7 +419,28 @@ function runPageRules(
   runContentRules(page, issues);
   runImageRules(page, issues);
   runSchemaRules(page, issues);
-  runTechnicalRules(page, issues);
+  runTechnicalRules(page, context, issues);
+  runKeywordRules(page, context, issues);
+}
+
+function runKeywordRules(page: CrawledPage, context: RulesContext, issues: DetectedIssue[]): void {
+  const analysis = context.keywordAnalyses.get(page.normalizedUrl);
+  if (!analysis?.available) return;
+  for (const target of analysis.targets) {
+    const isConfigured = target.source === "configured_primary" || target.source === "configured_secondary";
+    if (!isConfigured) continue;
+    if (!target.presentInTitle && !target.presentInH1 && !target.presentInMetaDescription) {
+      issues.push(issue("KEYWORD_MISSING_MAIN_SIGNALS", "content", "warning", "Target keyword absent from main page signals", `“${target.keyword}” was not measured in the title, meta description or H1.`, { keyword: target.keyword, source: target.source }, page.normalizedUrl));
+    } else if (target.source === "configured_primary" && !target.presentInTitle) {
+      issues.push(issue("PRIMARY_KEYWORD_MISSING_TITLE", "content", "warning", "Primary keyword missing from title", `“${target.keyword}” was not measured in the title.`, { keyword: target.keyword }, page.normalizedUrl));
+    }
+    if (target.source === "configured_primary" && !target.presentInH1) {
+      issues.push(issue("PRIMARY_KEYWORD_MISSING_H1", "content", "warning", "Primary keyword missing from H1", `“${target.keyword}” was not measured in an H1.`, { keyword: target.keyword }, page.normalizedUrl));
+    }
+    if (target.totalWordCount >= 100 && target.densityPercent > 4 && target.exactMentions >= 8) {
+      issues.push(issue("KEYWORD_OVERUSED", "content", "warning", "Target keyword may be overused", `“${target.keyword}” appeared ${target.exactMentions} times (${target.densityPercent}% exact-match density).`, { keyword: target.keyword, exactMentions: target.exactMentions, densityPercent: target.densityPercent, totalWordCount: target.totalWordCount }, page.normalizedUrl));
+    }
+  }
 }
 
 function runCanonicalRules(
@@ -862,7 +896,7 @@ function runSchemaRules(page: CrawledPage, issues: DetectedIssue[]): void {
   }
 }
 
-function runTechnicalRules(page: CrawledPage, issues: DetectedIssue[]): void {
+function runTechnicalRules(page: CrawledPage, context: RulesContext, issues: DetectedIssue[]): void {
   const parsed = page.parsed!;
   const url = page.normalizedUrl;
 
@@ -893,6 +927,63 @@ function runTechnicalRules(page: CrawledPage, issues: DetectedIssue[]): void {
         url,
       ),
     );
+  }
+
+  if (!parsed.ogUrl) {
+    issues.push(issue("OPEN_GRAPH_URL_MISSING", "metadata", "notice", "Missing og:url", "Add an absolute og:url so shared links resolve to the intended page.", {}, url));
+  } else {
+    const ogUrl = normalizeUrl(parsed.ogUrl, page.finalUrl ?? page.url);
+    const canonical = parsed.canonicals[0] ? normalizeUrl(parsed.canonicals[0], page.finalUrl ?? page.url) : null;
+    if (!ogUrl) {
+      issues.push(issue("OPEN_GRAPH_URL_INVALID", "metadata", "notice", "Malformed og:url", "The og:url value is not a valid HTTP or HTTPS URL.", { value: parsed.ogUrl }, url));
+    } else if (canonical && ogUrl.normalized !== canonical.normalized) {
+      issues.push(issue("OPEN_GRAPH_URL_MISMATCH", "metadata", "notice", "og:url differs from canonical", "Keep social and canonical URLs aligned unless the difference is intentional.", { ogUrl: ogUrl.normalized, canonical: canonical.normalized }, url));
+    }
+  }
+  if (!parsed.ogType) {
+    issues.push(issue("OPEN_GRAPH_TYPE_MISSING", "metadata", "notice", "Missing og:type", "Declare the Open Graph content type for consistent share previews.", {}, url));
+  }
+  if (parsed.ogTitle && parsed.ogTitle.length > 95) {
+    issues.push(issue("OPEN_GRAPH_TITLE_LONG", "metadata", "notice", "Open Graph title is very long", `The og:title is ${parsed.ogTitle.length} characters.`, { length: parsed.ogTitle.length }, url));
+  }
+  if (parsed.ogDescription && parsed.ogDescription.length > 300) {
+    issues.push(issue("OPEN_GRAPH_DESCRIPTION_LONG", "metadata", "notice", "Open Graph description is very long", `The og:description is ${parsed.ogDescription.length} characters.`, { length: parsed.ogDescription.length }, url));
+  }
+  if (parsed.ogImage && !normalizeUrl(parsed.ogImage, page.finalUrl ?? page.url)) {
+    issues.push(issue("OPEN_GRAPH_IMAGE_INVALID", "metadata", "notice", "Malformed Open Graph image URL", "The og:image value could not be resolved as an HTTP or HTTPS URL.", { value: parsed.ogImage }, url));
+  } else if (parsed.ogImage) {
+    const normalizedImage = normalizeUrl(parsed.ogImage, page.finalUrl ?? page.url);
+    const checked = normalizedImage ? context.linkResults.get(normalizedImage.normalized) : null;
+    if (checked?.isBroken) issues.push(issue("OPEN_GRAPH_IMAGE_UNAVAILABLE", "metadata", "notice", "Open Graph image is inaccessible", `The declared og:image returned ${checked.status ?? "no response"}.`, { image: normalizedImage?.href, status: checked.status }, url));
+  }
+
+  if (!parsed.twitterCard) {
+    issues.push(issue("TWITTER_CARD_MISSING", "metadata", "notice", "Missing Twitter Card type", "Add twitter:card to improve social share previews.", {}, url));
+  }
+  if (!parsed.twitterImage) {
+    issues.push(issue("TWITTER_IMAGE_MISSING", "metadata", "notice", "Missing Twitter Card image", "No twitter:image was measured. Platforms may fall back to Open Graph metadata.", {}, url));
+  } else if (!normalizeUrl(parsed.twitterImage, page.finalUrl ?? page.url)) {
+    issues.push(issue("TWITTER_IMAGE_INVALID", "metadata", "notice", "Malformed Twitter Card image URL", "The twitter:image value could not be resolved as an HTTP or HTTPS URL.", { value: parsed.twitterImage }, url));
+  } else {
+    const normalizedImage = normalizeUrl(parsed.twitterImage, page.finalUrl ?? page.url);
+    const checked = normalizedImage ? context.linkResults.get(normalizedImage.normalized) : null;
+    if (checked?.isBroken) issues.push(issue("TWITTER_IMAGE_UNAVAILABLE", "metadata", "notice", "Twitter Card image is inaccessible", `The declared twitter:image returned ${checked.status ?? "no response"}.`, { image: normalizedImage?.href, status: checked.status }, url));
+  }
+
+  const exceptions = page.browserProblems.filter((problem) => problem.type === "js_exception");
+  const consoleErrors = page.browserProblems.filter((problem) => problem.type === "console_error");
+  const failedImportant = page.browserProblems.filter((problem) => problem.type === "failed_request" && ["script", "stylesheet", "document"].includes(problem.resourceType ?? ""));
+  if (exceptions.length) {
+    issues.push(issue("UNCAUGHT_JS_ERROR", "performance", "warning", "Uncaught JavaScript error", `${exceptions.length} unique browser exception(s) were measured during rendering.`, { problems: exceptions.slice(0, 10) }, url));
+  }
+  if (consoleErrors.length >= 3) {
+    issues.push(issue("REPEATED_CONSOLE_ERRORS", "performance", "notice", "Repeated browser console errors", `${consoleErrors.length} unique console errors were measured during rendering.`, { problems: consoleErrors.slice(0, 10) }, url));
+  }
+  for (const resourceType of ["stylesheet", "script"] as const) {
+    const failed = failedImportant.filter((problem) => problem.resourceType === resourceType);
+    if (failed.length) {
+      issues.push(issue(resourceType === "stylesheet" ? "FAILED_CSS_REQUEST" : "FAILED_JS_REQUEST", "performance", "warning", `Failed ${resourceType} request`, `${failed.length} ${resourceType} resource(s) failed during browser rendering.`, { requests: failed.slice(0, 10) }, url));
+    }
   }
 
   if (page.url.startsWith("http://")) {
@@ -1159,6 +1250,9 @@ function runGraphRules(context: RulesContext, issues: DetectedIssue[], htmlPages
 
 function runPerformanceRules(context: RulesContext, issues: DetectedIssue[]): void {
   for (const summary of context.performance.values()) {
+    if (summary.renderBlockingCount > 0) {
+      issues.push(issue("RENDER_BLOCKING_RESOURCES", "performance", "warning", "Render-blocking resources detected", `Lighthouse measured ${summary.renderBlockingCount} resource(s) delaying the first render.`, { count: summary.renderBlockingCount, source: "pagespeed" }, summary.normalizedUrl));
+    }
     if (summary.performance != null && summary.performance < RULE_THRESHOLDS.lowPerformanceScore) {
       issues.push(
         issue(

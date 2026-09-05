@@ -15,6 +15,7 @@ export interface ISeoCrawlSettings {
   performanceUrls: string[];
   performanceStrategy: "mobile" | "desktop";
   maxPerformanceUrls: number;
+  keywordTargets: Array<{ url: string; primary: string; secondary: string[] }>;
 }
 
 export interface ISeoSchedule {
@@ -53,13 +54,17 @@ const crawlSettingsSchema = new Schema<ISeoCrawlSettings>(
     politenessDelayMs: { type: Number, default: 200, min: 0, max: 10000 },
     respectRobots: { type: Boolean, default: true },
     followSitemap: { type: Boolean, default: true },
-    renderJs: { type: Boolean, default: false },
+    renderJs: { type: Boolean, default: true },
     checkExternalLinks: { type: Boolean, default: true },
     excludePatterns: { type: [String], default: [] },
     extraSeedUrls: { type: [String], default: [] },
     performanceUrls: { type: [String], default: [] },
     performanceStrategy: { type: String, enum: ["mobile", "desktop"], default: "mobile" },
     maxPerformanceUrls: { type: Number, default: 5, min: 0, max: 50 },
+    keywordTargets: {
+      type: [new Schema({ url: String, primary: String, secondary: { type: [String], default: [] } }, { _id: false })],
+      default: [],
+    },
   },
   { _id: false },
 );

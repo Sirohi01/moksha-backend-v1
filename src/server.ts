@@ -6,6 +6,7 @@ import { processNotificationQueue } from "./lib/notificationQueue.service";
 import { captureSnapshot } from "./lib/reportSnapshot.service";
 import { runSystemServiceReminderSweep } from "./lib/systemServiceReminder.service";
 import { runScheduledAudits } from "./modules/seo/seo.scheduler";
+import { recoverAbandonedSeoAudits } from "./modules/seo/seo.orchestrator";
 
 // PRD Phase E1 — 1 minute, so a notification on the shortest retry backoff step (also 1 minute)
 // gets picked up promptly rather than sitting until the next longer-spaced sweep.
@@ -22,6 +23,10 @@ const SEO_AUDIT_SWEEP_INTERVAL_MS = 15 * 60_000;
 
 async function start(): Promise<void> {
   await connectDB();
+  const recoveredAudits = await recoverAbandonedSeoAudits();
+  if (recoveredAudits > 0) {
+    logger.warn(`SEO audit recovery marked ${recoveredAudits} interrupted audit(s) as failed`);
+  }
 
   const app = createApp();
   const server = app.listen(env.PORT, () => {

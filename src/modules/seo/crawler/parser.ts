@@ -42,6 +42,8 @@ export interface ParsedPage {
   metaDescription: string | null;
   metaDescriptionLength: number;
   metaRobots: string | null;
+  metaKeywords: string | null;
+  metaKeywordCount: number;
   canonicals: string[];
   ogTitle: string | null;
   ogDescription: string | null;
@@ -66,6 +68,7 @@ export interface ParsedPage {
   jsonLdBlocks: string[];
   hasAmpLink: boolean;
   bodyTextSample: string;
+  openingTextSample: string;
 }
 
 const LONG_HEADING_CHARS = 110;
@@ -205,6 +208,7 @@ export function parseHtml(html: string, pageUrl: string, siteHostname: string, i
   const title = normalizeText($("head title").first().text() || $("title").first().text()) || null;
   const metaDescription = metaContent($, 'meta[name="description" i]');
   const metaRobots = metaContent($, 'meta[name="robots" i]');
+  const metaKeywords = metaContent($, 'meta[name="keywords" i]');
 
   const canonicals = $('link[rel="canonical" i]')
     .map((_index, element) => $(element).attr("href") ?? "")
@@ -286,6 +290,8 @@ export function parseHtml(html: string, pageUrl: string, siteHostname: string, i
     metaDescription,
     metaDescriptionLength: metaDescription?.length ?? 0,
     metaRobots,
+    metaKeywords,
+    metaKeywordCount: metaKeywords ? metaKeywords.split(",").map((value) => value.trim()).filter(Boolean).length : 0,
     canonicals,
     ogTitle: metaContent($, 'meta[property="og:title" i]'),
     ogDescription: metaContent($, 'meta[property="og:description" i]'),
@@ -310,5 +316,6 @@ export function parseHtml(html: string, pageUrl: string, siteHostname: string, i
     jsonLdBlocks,
     hasAmpLink: $('link[rel="amphtml" i]').length > 0,
     bodyTextSample: visibleText.slice(0, 4000),
+    openingTextSample: visibleText.slice(0, 800),
   };
 }

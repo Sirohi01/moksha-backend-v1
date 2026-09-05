@@ -5,6 +5,23 @@ import type { Browser, BrowserContext, Page } from "playwright";
 
 type PlaywrightModule = typeof import("playwright");
 
+export interface BrowserProblem {
+  url: string;
+  message: string;
+  type: "console_error" | "console_warning" | "js_exception" | "failed_request";
+  resourceUrl: string | null;
+  resourceType: string | null;
+  statusCode: number | null;
+  timestamp: Date;
+}
+
+export interface RenderResult {
+  html: string;
+  problems: BrowserProblem[];
+  transferredBytes: number | null;
+  resourceCount: number;
+}
+
 let cachedModule: PlaywrightModule | null = null;
 let moduleChecked = false;
 let browser: Browser | null = null;
@@ -40,7 +57,7 @@ async function getBrowser(): Promise<Browser | null> {
   }
 }
 
-export async function renderPage(url: string, timeoutMs = 20000): Promise<string | null> {
+export async function renderPage(url: string, timeoutMs = 20000): Promise<RenderResult | null> {
   const safety = await assertSafeUrl(url);
   if (!safety.safe) return null;
 
@@ -52,25 +69,98 @@ export async function renderPage(url: string, timeoutMs = 20000): Promise<string
   try {
     context = await instance.newContext({ userAgent: CRAWLER_USER_AGENT });
     page = await context.newPage();
+    const problems = new Map<string, BrowserProblem>();
+    let transferredBytes = 0;
+    let hasTransferSizes = false;
+    let resourceCount = 0;
+    const record = (problem: BrowserProblem) => {
+      const key = `${problem.type}|${problem.message}|${problem.resourceUrl ?? ""}|${problem.statusCode ?? ""}`;
+      if (!problems.has(key) && problems.size < 60) problems.set(key, problem);
+    };
+    page.on("console", (message) => {
+      if (message.type() !== "error" && message.type() !== "warning") return;
+      record({
+        url,
+        message: message.text().slice(0, 1000),
+        type: message.type() === "error" ? "console_error" : "console_warning",
+        resourceUrl: null,
+        resourceType: null,
+        statusCode: null,
+        timestamp: new Date(),
+      });
+    });
+    page.on("pageerror", (error) => record({
+      url,
+      message: error.message.slice(0, 1000),
+      type: "js_exception",
+      resourceUrl: null,
+      resourceType: "document",
+      statusCode: null,
+      timestamp: new Date(),
+    }));
+    page.on("requestfailed", (request) => {
+      if (["media", "font"].includes(request.resourceType())) return;
+      record({
+        url,
+        message: (request.failure()?.errorText ?? "Network request failed").slice(0, 1000),
+        type: "failed_request",
+        resourceUrl: request.url().slice(0, 2000),
+        resourceType: request.resourceType(),
+        statusCode: null,
+        timestamp: new Date(),
+      });
+    });
+    page.on("response", async (response) => {
+      resourceCount += 1;
+      const length = Number(response.headers()["content-length"]);
+      if (Number.isFinite(length) && length >= 0) {
+        transferredBytes += length;
+        hasTransferSizes = true;
+      }
+      if (response.status() < 400) return;
+      const request = response.request();
+      record({
+        url,
+        message: `HTTP ${response.status()} ${response.statusText()}`.slice(0, 1000),
+        type: "failed_request",
+        resourceUrl: response.url().slice(0, 2000),
+        resourceType: request.resourceType(),
+        statusCode: response.status(),
+        timestamp: new Date(),
+      });
+    });
     await page.route("**/*", async (route) => {
       const request = route.request();
-      if (["image", "media", "font"].includes(request.resourceType())) {
+      if (["media", "font"].includes(request.resourceType())) {
         await route.abort();
         return;
       }
-      if (request.isNavigationRequest()) {
-        const navigationSafety = await assertSafeUrl(request.url());
-        if (!navigationSafety.safe) {
-          await route.abort();
+      const requestUrl = request.url();
+      if (/^https?:/i.test(requestUrl)) {
+        const requestSafety = await assertSafeUrl(requestUrl);
+        if (!requestSafety.safe) {
+          await route.abort("blockedbyclient");
           return;
         }
+      } else if (!/^(data|blob):/i.test(requestUrl)) {
+        await route.abort("blockedbyclient");
+        return;
       }
       await route.continue();
     });
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
+    const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
+    if (response) {
+      const finalSafety = await assertSafeUrl(response.url());
+      if (!finalSafety.safe) throw new Error(finalSafety.reason ?? "Unsafe redirect destination");
+    }
     await page.waitForLoadState("networkidle", { timeout: Math.min(timeoutMs, 5000) }).catch(() => undefined);
     const html = await page.content();
-    return html;
+    return {
+      html,
+      problems: [...problems.values()],
+      transferredBytes: hasTransferSizes ? transferredBytes : null,
+      resourceCount,
+    };
   } catch (error) {
     logger.warn("seoCrawler: JS rendering failed", { url, err: error });
     return null;

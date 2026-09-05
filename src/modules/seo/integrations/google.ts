@@ -439,6 +439,8 @@ export interface PageSpeedLab {
   speedIndexMs: number | null;
   ttiMs: number | null;
   serverResponseMs: number | null;
+  totalByteWeight: number | null;
+  resourceCount: number | null;
 }
 
 export interface PageSpeedField {
@@ -460,6 +462,7 @@ export interface PageSpeedResult {
   lab: PageSpeedLab;
   field: PageSpeedField;
   opportunities: Array<{ id: string; title: string; savingsMs: number | null }>;
+  renderBlockingResources: Array<{ url: string | null; type: string; savingsMs: number | null; source: "pagespeed" }>;
 }
 
 const EMPTY_FIELD: PageSpeedField = {
@@ -573,9 +576,21 @@ export async function runPageSpeedAudit(
           speedIndexMs: numeric("speed-index"),
           ttiMs: numeric("interactive"),
           serverResponseMs: numeric("server-response-time"),
+          totalByteWeight: numeric("total-byte-weight"),
+          resourceCount: Array.isArray(audits["network-requests"]?.details?.items) ? audits["network-requests"].details.items.length : null,
         },
         field,
         opportunities,
+        renderBlockingResources: (Array.isArray(audits["render-blocking-resources"]?.details?.items)
+          ? audits["render-blocking-resources"].details.items
+          : [])
+          .slice(0, 30)
+          .map((item: any) => ({
+            url: typeof item.url === "string" ? item.url : null,
+            type: String(item.resourceType ?? (String(item.url ?? "").match(/\.css(?:\?|$)/i) ? "stylesheet" : "script")),
+            savingsMs: typeof item.wastedMs === "number" ? Math.round(item.wastedMs) : null,
+            source: "pagespeed" as const,
+          })),
       });
     } catch (error) {
       lastError = error instanceof Error ? error.message : "PageSpeed request failed";

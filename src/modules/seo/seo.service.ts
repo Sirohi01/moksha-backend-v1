@@ -134,7 +134,7 @@ export async function listPages(site: ISeoSite, filters: PageListFilters) {
   const [rows, total] = await Promise.all([
     SeoPage.find(query)
       .select(
-        "normalizedUrl url path title titleLength metaDescription metaDescriptionLength httpStatus indexable indexabilityReason canonical canonicalIsSelf canonicalNormalized score issueCounts issueCategories h1 wordCount inLinks outLinks brokenLinkCount depth isOrphan inSitemap schemaTypes schemaValid hasBreadcrumbSchema breadcrumbValid hierarchyStatus headingCounts imageCount imagesMissingAlt performance search analytics crawledAt responseTimeMs",
+        "normalizedUrl url path title titleLength metaDescription metaDescriptionLength httpStatus indexable indexabilityReason canonical canonicalIsSelf canonicalNormalized score issueCounts issueCategories h1 wordCount inLinks outLinks brokenLinkCount depth isOrphan inSitemap schemaTypes schemaValid hasBreadcrumbSchema breadcrumbValid hierarchyStatus headingCounts imageCount imagesMissingAlt performance search analytics crawledAt responseTimeMs keywordAnalysis socialStatus browserHealth cdn",
       )
       .sort({ [sortField]: sortDir, normalizedUrl: 1 })
       .skip((page - 1) * limit)
@@ -193,6 +193,15 @@ function serializePageRow(page: Record<string, any>) {
       isFieldData: page.performance?.fieldLcpMs != null,
       fetchedAt: page.performance?.fetchedAt ?? null,
     },
+    keywordStatus: page.keywordAnalysis?.available
+      ? (page.keywordAnalysis.targets ?? []).some((target: any) => target.source === "configured_primary" && (!target.presentInTitle || !target.presentInH1)) ? "warning" : "ok"
+      : "not_available",
+    openGraphStatus: page.socialStatus?.openGraph ?? "not_available",
+    twitterStatus: page.socialStatus?.twitter ?? "not_available",
+    consoleErrorCount: (page.browserHealth?.consoleErrors?.length ?? 0) + (page.browserHealth?.jsExceptions?.length ?? 0),
+    failedRequestCount: page.browserHealth?.failedRequests?.length ?? 0,
+    renderBlockingCount: page.performance?.renderBlockingResources?.length ?? 0,
+    cdnStatus: page.cdn?.status ?? "unable_to_determine",
     search: page.search ?? null,
     analytics: page.analytics ?? null,
     lastCrawledAt: page.crawledAt,
@@ -287,7 +296,18 @@ export async function getPageDetail(site: ISeoSite, pageId: string) {
       ogTitle: page.ogTitle,
       ogDescription: page.ogDescription,
       ogImage: page.ogImage,
+      ogType: page.ogType,
+      ogUrl: page.ogUrl,
       twitterCard: page.twitterCard,
+      twitterTitle: page.twitterTitle,
+      twitterDescription: page.twitterDescription,
+      twitterImage: page.twitterImage,
+      metaKeywords: page.metaKeywords,
+      metaKeywordCount: page.metaKeywordCount,
+      socialStatus: page.socialStatus,
+      keywordAnalysis: page.keywordAnalysis,
+      browserHealth: page.browserHealth,
+      cdn: page.cdn,
       lang: page.lang,
       viewport: page.viewport,
       hreflang: page.hreflang,
@@ -358,6 +378,7 @@ export async function getPageDetail(site: ISeoSite, pageId: string) {
         lab: audit.lab,
         field: audit.field,
         opportunities: audit.opportunities,
+        renderBlockingResources: audit.renderBlockingResources,
         fetchedAt: audit.fetchedAt,
       })),
       labNote: "Lab data comes from a Lighthouse run in Google's test environment.",
